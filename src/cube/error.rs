@@ -7,7 +7,7 @@ pub enum CSError{
     SameStruct(&'static str,String),
     InvalidArguments(&'static str,&'static str),
     DuplicateName(&'static str,String),
-    ParseError(&'static str,&'static str),
+    ParseError(&'static str,String),
     OtherError(Box<dyn std::error::Error>) //To propagate std::error::Error errors
 }
 impl std::fmt::Display for CSError{

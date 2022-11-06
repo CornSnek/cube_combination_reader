@@ -7,14 +7,21 @@ struct CubeStruct{
     name:String,
     tier:i32,
     converts_to:HashMap<String,Link<CubeStruct>>,
-    fused_by:Option<[Link<CubeStruct>;2]>
+    fused_by:HashMap<StringPairKey,[Link<CubeStruct>;2]> //TODO: Change to HashMap
+}
+#[derive(Eq, Hash, PartialEq)]
+struct StringPairKey(String,String); //To swap strings alphabetically.
+impl StringPairKey{
+    fn new(s1:&String,s2:&String)->Self{
+        if s1<s2{ Self(s1.clone(),s2.clone()) }else{ Self(s2.clone(),s1.clone()) }
+    } 
 }
 macro_rules! SAVE_WRITE_FORMAT{
     ()=>{ "name: {}; tier: {}; fused_by: {}; converts_to: {};" }
 }
 impl CubeStruct{
     fn new(name:String,tier:i32)->Self{
-        Self{name,tier,converts_to:HashMap::new(),fused_by:None}
+        Self{name,tier,converts_to:HashMap::new(),fused_by:HashMap::new()}
     }
     fn add_to(&mut self,other:&Link<Self>)->Result<(),error::CSError>{
         let None=self.converts_to.insert(other.borrow().name.clone(),other.clone()) else{
@@ -23,27 +30,27 @@ impl CubeStruct{
         Ok(())
     }
     fn add_by(&mut self,other:&Link<Self>,other2:&Link<Self>)->Result<(),error::CSError>{
-        let None=self.fused_by else{
+        let key=StringPairKey::new(&other.borrow().name,&other2.borrow().name);
+        let None=self.fused_by.insert(key,[other.clone(),other2.clone()]) else{
             return Err(error::CSError::Link("CubeStruct::add_by"))
         };
-        let (other,other2)=if other.borrow().name<other2.borrow().name{(other,other2)}else{(other2,other)};//Swap by alphabetical order.
-        self.fused_by=Some([other.clone(),other2.clone()]);
         Ok(())
     }
     fn save_write_str(&self)->String{
         let fb_str={
             let mut str=String::new();
-            if let Some([csl1,csl2])=&self.fused_by{
-                str.push_str(csl1.borrow().name.as_str());
-                str.push(',');
-                str.push_str(csl2.borrow().name.as_str());
+            for (i,k) in self.fused_by.keys().enumerate(){
+                str.push_str(k.0.as_str());
+                str.push('|');
+                str.push_str(k.1.as_str());
+                if i!=self.fused_by.len()-1{ str.push(','); }
             }
             str
         };
         let ct_str={
             let mut str=String::new();
-            for (i,csl) in self.converts_to.values().enumerate(){
-                str.push_str(csl.borrow().name.as_str());
+            for (i,k) in self.converts_to.keys().enumerate(){
+                str.push_str(k.as_str());
                 if i!=self.converts_to.len()-1{ str.push(','); }
             }
             str
@@ -63,17 +70,17 @@ impl Display for CubeStruct{
             }
             str
         }else{ "(None)".to_string() };
-        let con_by={
+        let fus_by={
             let mut str=String::new();
-            if let Some(csl)=&self.fused_by{
-                str+="\""; str.push_str(csl[0].borrow().name.as_str()); str+="\"";
-                str+=",\""; str.push_str(csl[1].borrow().name.as_str()); str+="\"";
-                str
-            }else{
-                "(None)".to_string()
+            for (i,k) in self.fused_by.keys().enumerate(){
+                str.push_str(k.0.as_str());
+                str.push('|');
+                str.push_str(k.1.as_str());
+                if i!=self.fused_by.len()-1{ str.push(','); }
             }
+            str
         };
-        write!(f,r#"CubeStruct{{ name:["{}"], tier:[{}], converts_to:[{}], fused_by:[{}] }}"#,self.name,self.tier,con_to,con_by)
+        write!(f,r#"CubeStruct{{ name:["{}"], tier:[{}], converts_to:[{}], fused_by:[{}] }}"#,self.name,self.tier,con_to,fus_by)
     }
 }
 /*
@@ -112,7 +119,7 @@ impl CubeDLL{
     fn remove_all_cubes(&mut self){
         for csl in self.hashmap.values(){ //Remove possible Rc circular references.
             let mut cs=csl.borrow_mut();
-            cs.fused_by=None;
+            cs.fused_by.clear();
             cs.converts_to.clear();
         }
         self.hashmap.clear();
@@ -135,16 +142,10 @@ impl CubeDLL{
         csl2.borrow_mut().add_to(&csl_p)?;
         Ok(())
     }
-    fn unlink_at_p_fby(&self)->Result<bool,error::CSError>{
+    fn unlink_at_p_fby(&self)->Result<bool,error::CSError>{ //TODO: Change this.
         let Some(csl)=&self.pointer else{ return Err(error::CSError::NullPointer("CubeDLL::link_at_p_fby")) };
-        let mut cs_p=csl.borrow_mut();
-        if let Some([csl1,csl2])=&cs_p.fused_by.take(){
-            csl1.borrow_mut().converts_to.remove(&cs_p.name);
-            csl2.borrow_mut().converts_to.remove(&cs_p.name);
-            Ok(true)
-        }else{
-            Ok(false)
-        }
+        csl.borrow_mut().fused_by.clear();
+        Ok(true)
     }
     fn get_info_p(&self)->Result<(),error::CSError>{
         if let Some(csl)=&self.pointer{
@@ -153,26 +154,25 @@ impl CubeDLL{
         }else{ unreachable!() }
     }
     fn get_info_cube_paths(&self){
-        println!("Syntax: fused_by: [2 cubes to fuse] => [[this cube name]](tier) => converts_to: [cube name array]");
+        println!("Syntax: fused_by: [(2 cubes) array] => [[this cube name]](tier) => converts_to: [cube name array]");
         for csl in self.hashmap.values(){
             let cs=csl.borrow();
-            let mut cs_str=" => [[\"".to_string();
+            let mut cs_str=String::new();
+            cs_str+="fused_by: [";
+            for (i,k) in cs.fused_by.keys().enumerate(){
+                cs_str.push('"');
+                cs_str.push_str(k.0.as_str());
+                cs_str.push_str("\"|\"");
+                cs_str.push_str(k.1.as_str());
+                cs_str.push('"');
+                if i!=cs.fused_by.len()-1{ cs_str.push(','); }
+            }
+            cs_str+="]";
+            cs_str.push_str(" => [[\"");
             cs_str.push_str(cs.name.as_str());
             cs_str.push_str("\"]](");
             cs_str.push_str(cs.tier.to_string().as_str());
             cs_str.push_str(") => ");
-            match &cs.fused_by{
-                Some(csl)=>{
-                    let mut fb_str=String::new();
-                    fb_str+="fused_by: [\"";
-                    fb_str+=csl[0].borrow().name.as_str();
-                    fb_str+="\",\"";
-                    fb_str+=csl[1].borrow().name.as_str();
-                    fb_str+="\"]";
-                    cs_str.insert_str(0,fb_str.as_str());
-                }
-                None=>{ cs_str.insert_str(0,"fused_by: (None)"); }
-            }
             cs_str.push_str("converts_to: [");
             for (i,(csl_strs,_)) in cs.converts_to.iter().enumerate(){
                 cs_str.push('"'); cs_str.push_str(csl_strs.as_str()); cs_str.push('"');
