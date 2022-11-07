@@ -1,7 +1,7 @@
 pub mod error;
 mod tui;
 pub use tui::TUI;
-use std::{rc::Rc, cell::RefCell, collections::HashMap, fmt::{Display, Formatter}};
+use std::{rc::Rc, cell::RefCell, collections::HashMap, fmt::{Display, Formatter}, hash::Hash};
 type Link<T>=Rc<RefCell<T>>;
 struct CubeStruct{
     name:String,
@@ -9,12 +9,15 @@ struct CubeStruct{
     converts_to:HashMap<String,Link<CubeStruct>>,
     fused_by:HashMap<StringPairKey,[Link<CubeStruct>;2]> //TODO: Change to HashMap
 }
-#[derive(Eq, Hash, PartialEq)]
-struct StringPairKey(String,String); //To swap strings alphabetically.
+#[derive(Eq, Hash, PartialEq, Clone, Debug)]
+pub struct StringPairKey(String,String); //To swap strings alphabetically.
 impl StringPairKey{
-    fn new(s1:&String,s2:&String)->Self{
+    pub fn new(s1:&String,s2:&String)->Self{
         if s1<s2{ Self(s1.clone(),s2.clone()) }else{ Self(s2.clone(),s1.clone()) }
-    } 
+    }
+    pub fn contains_key(&self,str:&String)->bool{
+        self.0==*str||self.1==*str
+    }
 }
 macro_rules! SAVE_WRITE_FORMAT{
     ()=>{ "name: {}; tier: {}; fused_by: {}; converts_to: {};" }
@@ -84,7 +87,7 @@ impl Display for CubeStruct{
     }
 }
 /*
-impl Drop for CubeStruct{
+impl Drop for CubeStruct{ //Printing drop for debugging.
     fn drop(&mut self){
         println!("Dropped CubeStruct \"{}\"",self.name);
     }
@@ -147,6 +150,32 @@ impl CubeDLL{
         csl.borrow_mut().fused_by.clear();
         Ok(true)
     }
+    ///Remove all references of this CubeStruct at pointer including the pointer as well.
+    fn destroy_at_p(&mut self)->Result<(),error::CSError>{
+        let Some(csl)=self.pointer.take() else{ return Err(error::CSError::NullPointer("CubeDLL::link_at_p_fby")) };
+        let mut cs=csl.borrow_mut();
+        let cs_name=cs.name.clone();
+        for cs_fbs in cs.fused_by.values(){
+            cs_fbs[0].borrow_mut().converts_to.remove(&cs_name);
+            cs_fbs[1].borrow_mut().converts_to.remove(&cs_name);
+            println!("Removing \"{}\" from cubes \"{}\" and \"{}\"",cs_name,cs_fbs[0].borrow().name,cs_fbs[1].borrow().name);
+        }
+        cs.fused_by.clear();
+        for cs_ct in cs.converts_to.values(){
+            let mut cs_ct_bm=cs_ct.borrow_mut();
+            let mut keys_to_delete=Vec::new();
+            for spk in cs_ct_bm.fused_by.keys(){
+                if spk.contains_key(&cs_name){
+                    println!("Removing cube fusion \"{}\" and \"{}\" for \"{}\"",spk.0,spk.1,cs_ct_bm.name);
+                    keys_to_delete.push(spk.clone());
+                }
+            }
+            for spk in keys_to_delete{ cs_ct_bm.fused_by.remove(&spk); }
+        }
+        cs.converts_to.clear();
+        self.hashmap.remove(&cs_name);
+        Ok(())
+    } //Check if all references are removed
     fn get_info_p(&self)->Result<(),error::CSError>{
         if let Some(csl)=&self.pointer{
             println!("Info of cube pointer: {}",csl.borrow());

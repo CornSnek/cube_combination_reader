@@ -4,11 +4,11 @@ pub struct TUI{
     cdll:super::CubeDLL,
     done_program:bool    
 }
-macro_rules! Err_to_custom_Err{
+macro_rules! ErrToCSErr{
     ($e:tt)=>{ Err(CSError::OtherError(Box::new($e))) }
 }
 macro_rules! return_if_error{
-    ($p:expr)=>(if let Err(e)=$p{ return Err_to_custom_Err!(e) })
+    ($p:expr)=>(if let Err(e)=$p{ return ErrToCSErr!(e) })
 }
 impl TUI{
     pub fn new()->Self{
@@ -23,13 +23,23 @@ impl TUI{
                 if args.len()%2==0{
                     return Err(CSError::InvalidArguments("TUI::do_command","<add ((cube_name) (Tier))+>"))
                 }
-                for ch in args[1..].chunks(2){
-                    let is_tier_num=ch[1].parse::<i32>();
+                for chunk in args[1..].chunks(2){
+                    let is_tier_num=chunk[1].parse::<i32>();
                     match is_tier_num{
-                        Ok(tier_num)=>{ self.cdll.add(super::CubeStruct::new(ch[0].to_string(),tier_num))?; }
-                        Err(e)=> return Err_to_custom_Err!(e)
+                        Ok(tier_num)=>{ self.cdll.add(super::CubeStruct::new(chunk[0].to_string(),tier_num))?; }
+                        Err(e)=> return ErrToCSErr!(e)
                     }
-                    println!("Cube \"{}\" added",ch[0]);
+                    println!("Cube \"{}\" added",chunk[0]);
+                }
+            }
+            "remove"|"drop"|"destroy"=>{
+                if args.len()==1{
+                    return Err(CSError::InvalidArguments("TUI::do_command","<remove|drop|destroy (cube_name)+>"))
+                }
+                for cube_str in &args[1..]{
+                    self.cdll.point_to(cube_str.to_string())?;
+                    self.cdll.destroy_at_p()?;
+                    println!("Cube \"{cube_str}\" and its links have been destroyed.")
                 }
             }
             "read"=>{
@@ -98,14 +108,14 @@ impl TUI{
                     return Err(CSError::InvalidArguments("TUI::do_command","<change_tier (cube_name) (this_tier)>"))
                 }
                 self.cdll.point_to(args[1].to_string())?;
-                let tier={ match args[2].parse::<i32>(){ Ok(tier)=>{ tier } Err(e)=> return Err_to_custom_Err!(e) } };
+                let tier={ match args[2].parse::<i32>(){ Ok(tier)=>{ tier } Err(e)=> return ErrToCSErr!(e) } };
                 self.cdll.change_tier_at_p(tier)?;
                 println!("Tier changed to {tier} for cube \"{}\"",args[1]);
             }
             "usage"=>{
                 println!("Usage: Write names of cubes and their tiers and fusions with other cubes.\n\
                 + means that more than one set of arguments can be repeated enclosed in ()+ (Example: add cube1 0 cube2 1 cube3 3\n\
-                Commands: <add ((cube_name) (Tier))+>,<read (cube_name)+>,<read_all>,<link|fuse (cube_a) with (cube_b1) (cube_b2)>\n\
+                Commands: <add ((cube_name) (Tier))+>,<remove|drop|destroy (cube_name)+>,<read (cube_name)+>,<read_all>,<link|fuse (cube_a) with (cube_b1) (cube_b2)>\n\
                 <unlink_fuses (cube_name)+>,<clear_all>,<change_tier (cube_name) (this_tier)>\n\
                 <save_to|write_to (file_name)>,<load_from (file_name)>,<exit>");
             }
@@ -127,7 +137,7 @@ impl TUI{
             if args[0]=="y"{ break }else if args[0]=="n"{ return Ok(()) }
             break;
         }
-        let mut to_file={ match File::create(file_name){ Ok(file)=>file, Err(e)=>return Err_to_custom_Err!(e) } };
+        let mut to_file={ match File::create(file_name){ Ok(file)=>file, Err(e)=>return ErrToCSErr!(e) } };
         let mut sorted:Box<_>=self.cdll.hashmap.iter().collect();
         sorted.sort_by(|kv1,kv2| kv1.0.cmp(kv2.0));
         for (_,csl) in sorted.iter(){
@@ -146,7 +156,7 @@ impl TUI{
             let args:Box<_>=buf.split_whitespace().collect();
             if args[0]=="y"{ break }else if args[0]=="n"{ return Ok(()) }
         }
-        let from_file={ match File::open(file_name){ Ok(file)=>file, Err(e)=>return Err_to_custom_Err!(e) } };
+        let from_file={ match File::open(file_name){ Ok(file)=>file, Err(e)=>return ErrToCSErr!(e) } };
         let mut bufread=BufReader::new(from_file);
         let mut str=String::new();
         return_if_error!{bufread.read_to_string(&mut str)}
@@ -161,7 +171,7 @@ impl TUI{
             let i=i+1;
             let Some(cube_name)=cube_str[0].strip_suffix(';') else{ return Err(CSError::ParseError("TUI::read_to_file",format!("Line {i}: Missing semi-colon at field converts_to"))) };
             let Some(tier_str)=cube_str[1].strip_suffix(';') else{ return Err(CSError::ParseError("TUI::read_to_file",format!("Line {i}: Missing semi-colon at field tier"))) };
-            let tier={ match tier_str.parse::<i32>(){ Ok(tier)=>{ tier } Err(e)=> return Err_to_custom_Err!(e) } };
+            let tier={ match tier_str.parse::<i32>(){ Ok(tier)=>{ tier } Err(e)=> return ErrToCSErr!(e) } };
             self.cdll.add(super::CubeStruct::new(cube_name.to_string(),tier))?;
             println!("Cube \"{}\" added",cube_name);
             let Some(valid_fcs)=cube_str[2].strip_suffix(';') else{ return Err(CSError::ParseError("TUI::read_to_file",format!("Line {i}: Missing semi-colon at field fused_by"))) };
