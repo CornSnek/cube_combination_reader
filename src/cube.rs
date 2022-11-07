@@ -15,22 +15,30 @@ struct CubeStruct{
     name:String,
     tier:i32,
     converts_to:HashMap<String,Link<CubeStruct>>,
-    fused_by:HashMap<StringPairKey,[Link<CubeStruct>;2]>
+    fused_by:HashMap<FuseKey,[Link<CubeStruct>;2]>
 }
+///Don't construct enums directly due to different hash possibility. Use FuseKeys::new_* implementation functions instead.
 #[derive(Eq, Hash, PartialEq, Clone, Debug)]
-pub struct StringPairKey(String,String); //To swap strings alphabetically.
-impl StringPairKey{
-    pub fn new(s1:&String,s2:&String)->Self{
-        if s1<s2{ Self(s1.clone(),s2.clone()) }else{ Self(s2.clone(),s1.clone()) }
+enum FuseKey{ Pair(String,String), Single(String) }
+impl FuseKey{
+    ///Call new_pair to rearrange alphabetically and make the hash the same.
+    fn new_pair(s1:&String,s2:&String)->Self{
+        if s1<s2{ Self::Pair(s1.clone(),s2.clone()) }else{ Self::Pair(s2.clone(),s1.clone()) }
     }
-    pub fn contains_key(&self,cmp_str:&String)->bool{
-        self.0==*cmp_str||self.1==*cmp_str
+    fn new_single(s1:&String)->Self{
+        Self::Single(s1.clone())
     }
-    pub fn as_rewrite_key(&self,old_str:&String,to_str:&String)->Self{
-        Self(
-            if self.0==*old_str{to_str.clone()}else{self.0.clone()},
-            if self.1==*old_str{to_str.clone()}else{self.1.clone()}
-        )
+    fn contains_key(&self,cmp_str:&String)->bool{
+        match self{
+            Self::Pair(s0,s1)=>{s0==cmp_str||s1==cmp_str},
+            Self::Single(s)=>{s==cmp_str}
+        }
+    }
+    fn as_rewrite_key(&self,old_str:&String,to_str:&String)->Self{
+        match self{
+            Self::Pair(s0,s1)=>{ Self::new_pair(if s0==old_str{to_str}else{s0},if s1==old_str{to_str}else{s1}) },
+            Self::Single(s)=>{ if s==old_str{ Self::new_single(to_str) }else{ self.clone() } }
+        }
     }
 }
 impl CubeStruct{
@@ -44,7 +52,7 @@ impl CubeStruct{
         Ok(())
     }
     fn add_by(&mut self,other:&Link<Self>,other2:&Link<Self>)->Result<(),error::CSError>{
-        let key=StringPairKey::new(&other.borrow().name,&other2.borrow().name);
+        let key=FuseKey::new_pair(&other.borrow().name,&other2.borrow().name);
         let None=self.fused_by.insert(key,[other.clone(),other2.clone()]) else{
             return Err(error::CSError::LinkError("CubeStruct::add_by"))
         };
@@ -54,9 +62,16 @@ impl CubeStruct{
         let fb_str={
             let mut str=String::new();
             for (i,k) in self.fused_by.keys().enumerate(){
-                str.push_str(k.0.as_str());
-                str.push('|');
-                str.push_str(k.1.as_str());
+                match k{
+                    FuseKey::Pair(k0,k1)=>{
+                        str.push_str(k0.as_str());
+                        str.push('|');
+                        str.push_str(k1.as_str());
+                    }
+                    FuseKey::Single(k0)=>{
+                        str.push_str(k0.as_str());
+                    }
+                }
                 if i!=self.fused_by.len()-1{ str.push(','); }
             }
             str
@@ -87,9 +102,16 @@ impl Display for CubeStruct{
         let fus_by={
             let mut str=String::new();
             for (i,k) in self.fused_by.keys().enumerate(){
-                str.push_str(k.0.as_str());
-                str.push('|');
-                str.push_str(k.1.as_str());
+                match k{
+                    FuseKey::Pair(k0,k1)=>{
+                        str.push_str(k0.as_str());
+                        str.push('|');
+                        str.push_str(k1.as_str());
+                    }
+                    FuseKey::Single(k0)=>{
+                        str.push_str(k0.as_str());
+                    }
+                }
                 if i!=self.fused_by.len()-1{ str.push(','); }
             }
             str
@@ -174,13 +196,20 @@ impl CubeDLL{
         for cs_ct in cs.converts_to.values(){
             let mut cs_ct_bm=cs_ct.borrow_mut();
             let mut keys_to_delete=Vec::new();
-            for spk in cs_ct_bm.fused_by.keys(){
-                if spk.contains_key(&cs_name){
-                    println!("Removing cube fusion \"{}\" and \"{}\" for \"{}\"",spk.0,spk.1,cs_ct_bm.name);
-                    keys_to_delete.push(spk.clone());
+            for fuse_k in cs_ct_bm.fused_by.keys(){
+                if fuse_k.contains_key(&cs_name){
+                    match fuse_k{
+                        FuseKey::Pair(k0,k1)=>{
+                            println!("Removing fuse key pair {{\"{}\",\"{}\"}} for \"{}\"",k0,k1,cs_ct_bm.name);
+                        }
+                        FuseKey::Single(k0)=>{
+                            println!("Removing fuse key {{\"{}\"}} for \"{}\"",k0,cs_ct_bm.name);
+                        }
+                    }
+                    keys_to_delete.push(fuse_k.clone());
                 }
             }
-            for spk in keys_to_delete{ cs_ct_bm.fused_by.remove(&spk); }
+            for fuse_k in keys_to_delete{ cs_ct_bm.fused_by.remove(&fuse_k); }
         }
         cs.converts_to.clear();
         self.hashmap.remove(&cs_name);
@@ -208,17 +237,17 @@ impl CubeDLL{
         for cs_ct in cs.converts_to.values(){
             let mut cs_ct_bm=cs_ct.borrow_mut();
             let mut keys_to_change=Vec::new();
-            for spk in cs_ct_bm.fused_by.keys(){
-                if spk.contains_key(&cs_old_name){
-                    keys_to_change.push(spk.clone()); //To extract value from old key to replace with new.
-                    println!("Changing key names of \"{cs_old_name}\" to \"{to_name}\" for cube \"{}\"",to_name);
+            for fuse_k in cs_ct_bm.fused_by.keys(){
+                if fuse_k.contains_key(&cs_old_name){
+                    keys_to_change.push(fuse_k.clone()); //To extract value from old key to replace with new.
+                    println!("Changing key names of \"{cs_old_name}\" to \"{to_name}\" for cube \"{}\"",cs_ct_bm.name);
                 }
             }
-            for spk_old in keys_to_change.iter(){
-                let Some(v)=cs_ct_bm.fused_by.remove(spk_old) else{
+            for fuse_k_old in keys_to_change.iter(){
+                let Some(v)=cs_ct_bm.fused_by.remove(fuse_k_old) else{
                     return Err(error::CSError::EmptyValue("CubeDLL::rename_at_p",cs_ct_bm.name.clone()))
                 };
-                cs_ct_bm.fused_by.insert(spk_old.as_rewrite_key(&cs_old_name,&to_name),v);
+                cs_ct_bm.fused_by.insert(fuse_k_old.as_rewrite_key(&cs_old_name,&to_name),v);
             }
         }
         let Some(v)=self.hashmap.remove(&cs_old_name) else{
@@ -234,16 +263,24 @@ impl CubeDLL{
         }else{ unreachable!() }
     }
     fn get_info_cube_paths(&self){
-        println!("Syntax: fused_by: [(2 cubes) array] => [[this cube name]](tier) => converts_to: [cube name array]");
+        println!("Syntax: fused_by: [fuse key array (single/pair)] => [[this cube name]](tier) => converts_to: [cube name array]");
         for csl in self.hashmap.values(){
             let cs=csl.borrow();
             let mut cs_str=String::new();
             cs_str+="fused_by: [";
             for (i,k) in cs.fused_by.keys().enumerate(){
                 cs_str.push('"');
-                cs_str.push_str(k.0.as_str());
-                cs_str.push_str("\"|\"");
-                cs_str.push_str(k.1.as_str());
+                match k{
+                    FuseKey::Pair(k0,k1)=>{
+                        cs_str.push_str(k0.as_str());
+                        cs_str.push_str("\"|\"");
+                        cs_str.push_str(k1.as_str());
+                        
+                    }
+                    FuseKey::Single(k0)=>{
+                        cs_str.push_str(k0.as_str());
+                    }
+                }
                 cs_str.push('"');
                 if i!=cs.fused_by.len()-1{ cs_str.push(','); }
             }

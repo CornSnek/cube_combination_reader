@@ -39,7 +39,7 @@ impl TUI{
                 for cube_str in &args[1..]{
                     self.cdll.point_to(cube_str.to_string())?;
                     self.cdll.destroy_at_p()?;
-                    println!("Cube \"{cube_str}\" and its links have been destroyed.");
+                    println!("Cube \"{cube_str}\" and all of its links have been destroyed.");
                 }
             }
             "rename"=>{
@@ -48,7 +48,7 @@ impl TUI{
                 }
                 self.cdll.point_to(args[1].to_string())?;
                 self.cdll.rename_at_p(args[3].to_string())?;
-                println!("Cube \"{}\" renamed to \"{}\"",args[1],args[3]);
+                println!("Cube \"{}\" successfully renamed to \"{}\"",args[1],args[3]);
             }
             "read"=>{
                 if args.len()==1{
@@ -98,7 +98,7 @@ impl TUI{
                 }
                 self.read_to_file(args[1])?;
             }
-            "clear_all"=>{
+            "remove_all"|"destroy_all"|"drop_all"=>{
                 use std::io::Write;
                 loop{
                     print!("All cube data will be erased without saving. Continue? (y/n)\n> ");
@@ -124,7 +124,7 @@ impl TUI{
                 println!("Usage: Write names of cubes and their tiers and fusions with other cubes.\n\
                 + means that more than one set of arguments can be repeated enclosed in ()+ (Example: add cube1 0 cube2 1 cube3 3\n\
                 Commands: <add ((cube_name) (Tier))+>,<remove|drop|destroy (cube_name)+>,<rename (cube_name) to (new_cube_name)>,<read (cube_name)+>,<read_all>,<link|fuse (cube_a) with (cube_b1) (cube_b2)>\n\
-                <unlink_fuses (cube_name)+>,<clear_all>,<change_tier (cube_name) (this_tier)>\n\
+                <unlink_fuses (cube_name)+>,<remove_all|drop_all|destroy_all>,<change_tier (cube_name) (this_tier)>\n\
                 <save_to|write_to (file_name)>,<load_from (file_name)>,<exit>");
             }
             invalid=>{
