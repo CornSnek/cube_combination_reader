@@ -1,5 +1,13 @@
-pub mod error;
+///For format!(...) and to be consistent for saving/loading the same characters.
+macro_rules! SWF{
+    ()=>{ concat!(SWF!(N)," {}; ",SWF!(T)," {}; ",SWF!(FB)," {}; ",SWF!(CT)," {};") };
+    (N)=>{"n:"};
+    (T)=>{"t:"};
+    (FB)=>{"fb:"};
+    (CT)=>{"ct:"};
+}
 mod tui;
+pub mod error;
 pub use tui::TUI;
 use std::{rc::Rc, cell::RefCell, collections::HashMap, fmt::{Display, Formatter}, hash::Hash};
 type Link<T>=Rc<RefCell<T>>;
@@ -7,7 +15,7 @@ struct CubeStruct{
     name:String,
     tier:i32,
     converts_to:HashMap<String,Link<CubeStruct>>,
-    fused_by:HashMap<StringPairKey,[Link<CubeStruct>;2]> //TODO: Change to HashMap
+    fused_by:HashMap<StringPairKey,[Link<CubeStruct>;2]>
 }
 #[derive(Eq, Hash, PartialEq, Clone, Debug)]
 pub struct StringPairKey(String,String); //To swap strings alphabetically.
@@ -15,12 +23,15 @@ impl StringPairKey{
     pub fn new(s1:&String,s2:&String)->Self{
         if s1<s2{ Self(s1.clone(),s2.clone()) }else{ Self(s2.clone(),s1.clone()) }
     }
-    pub fn contains_key(&self,str:&String)->bool{
-        self.0==*str||self.1==*str
+    pub fn contains_key(&self,cmp_str:&String)->bool{
+        self.0==*cmp_str||self.1==*cmp_str
     }
-}
-macro_rules! SAVE_WRITE_FORMAT{
-    ()=>{ "name: {}; tier: {}; fused_by: {}; converts_to: {};" }
+    pub fn as_rewrite_key(&self,old_str:&String,to_str:&String)->Self{
+        Self(
+            if self.0==*old_str{to_str.clone()}else{self.0.clone()},
+            if self.1==*old_str{to_str.clone()}else{self.1.clone()}
+        )
+    }
 }
 impl CubeStruct{
     fn new(name:String,tier:i32)->Self{
@@ -28,14 +39,14 @@ impl CubeStruct{
     }
     fn add_to(&mut self,other:&Link<Self>)->Result<(),error::CSError>{
         let None=self.converts_to.insert(other.borrow().name.clone(),other.clone()) else{
-            return Err(error::CSError::Link("CubeStruct::add_to"))
+            return Err(error::CSError::LinkError("CubeStruct::add_to"))
         };
         Ok(())
     }
     fn add_by(&mut self,other:&Link<Self>,other2:&Link<Self>)->Result<(),error::CSError>{
         let key=StringPairKey::new(&other.borrow().name,&other2.borrow().name);
         let None=self.fused_by.insert(key,[other.clone(),other2.clone()]) else{
-            return Err(error::CSError::Link("CubeStruct::add_by"))
+            return Err(error::CSError::LinkError("CubeStruct::add_by"))
         };
         Ok(())
     }
@@ -58,7 +69,7 @@ impl CubeStruct{
             }
             str
         };
-        format!(SAVE_WRITE_FORMAT!(),self.name.as_str(),self.tier.to_string(),fb_str,ct_str)
+        format!(SWF!(),self.name.as_str(),self.tier.to_string(),fb_str,ct_str)
     }
 }
 impl Display for CubeStruct{
@@ -91,8 +102,7 @@ impl Drop for CubeStruct{ //Printing drop for debugging.
     fn drop(&mut self){
         println!("Dropped CubeStruct \"{}\"",self.name);
     }
-}
-*/
+}*/
 struct CubeDLL{
     pointer:Option<Link<CubeStruct>>,
     hashmap:HashMap<String,Link<CubeStruct>>
@@ -152,7 +162,7 @@ impl CubeDLL{
     }
     ///Remove all references of this CubeStruct at pointer including the pointer as well.
     fn destroy_at_p(&mut self)->Result<(),error::CSError>{
-        let Some(csl)=self.pointer.take() else{ return Err(error::CSError::NullPointer("CubeDLL::link_at_p_fby")) };
+        let Some(csl)=self.pointer.take() else{ return Err(error::CSError::NullPointer("CubeDLL::destroy_at_p")) };
         let mut cs=csl.borrow_mut();
         let cs_name=cs.name.clone();
         for cs_fbs in cs.fused_by.values(){
@@ -175,7 +185,48 @@ impl CubeDLL{
         cs.converts_to.clear();
         self.hashmap.remove(&cs_name);
         Ok(())
-    } //Check if all references are removed
+    }
+    fn rename_at_p(&mut self,to_name:String)->Result<(),error::CSError>{
+        let None=self.hashmap.get(&to_name) else{ return Err(error::CSError::DuplicateName("CubeDLL::rename_at_p",to_name)) };
+        let Some(csl)=&self.pointer else{ return Err(error::CSError::NullPointer("CubeDLL::rename_at_p")) };
+        let mut cs=csl.borrow_mut();
+        let cs_old_name=cs.name.clone();
+        cs.name=to_name.clone();
+        for cs_fbs in cs.fused_by.values(){
+            let Some(v0)=cs_fbs[0].borrow_mut().converts_to.remove(&cs_old_name) else{
+                return Err(error::CSError::EmptyValue("CubeDLL::rename_at_p",cs_fbs[0].borrow().name.clone()))
+            };
+            cs_fbs[0].borrow_mut().converts_to.insert(to_name.clone(),v0);
+            if cs_fbs[0].borrow().name.clone()!=cs_fbs[1].borrow().name.clone(){ //If same key name.
+                let Some(v1)=cs_fbs[1].borrow_mut().converts_to.remove(&cs_old_name) else{
+                    return Err(error::CSError::EmptyValue("CubeDLL::rename_at_p",cs_fbs[1].borrow().name.clone()))
+                };
+                cs_fbs[1].borrow_mut().converts_to.insert(to_name.clone(),v1);
+            }
+            println!("Changing key name of \"{cs_old_name}\" to \"{to_name}\" for \"{}\" and \"{}\"",cs_fbs[0].borrow().name,cs_fbs[1].borrow().name);
+        }
+        for cs_ct in cs.converts_to.values(){
+            let mut cs_ct_bm=cs_ct.borrow_mut();
+            let mut keys_to_change=Vec::new();
+            for spk in cs_ct_bm.fused_by.keys(){
+                if spk.contains_key(&cs_old_name){
+                    keys_to_change.push(spk.clone()); //To extract value from old key to replace with new.
+                    println!("Changing key names of \"{cs_old_name}\" to \"{to_name}\" for cube \"{}\"",to_name);
+                }
+            }
+            for spk_old in keys_to_change.iter(){
+                let Some(v)=cs_ct_bm.fused_by.remove(spk_old) else{
+                    return Err(error::CSError::EmptyValue("CubeDLL::rename_at_p",cs_ct_bm.name.clone()))
+                };
+                cs_ct_bm.fused_by.insert(spk_old.as_rewrite_key(&cs_old_name,&to_name),v);
+            }
+        }
+        let Some(v)=self.hashmap.remove(&cs_old_name) else{
+            return Err(error::CSError::EmptyValue("CubeDLL::rename_at_p","CubeDLL Hashmap".to_string()))
+        };
+        self.hashmap.insert(to_name,v);
+        Ok(())
+    }
     fn get_info_p(&self)->Result<(),error::CSError>{
         if let Some(csl)=&self.pointer{
             println!("Info of cube pointer: {}",csl.borrow());

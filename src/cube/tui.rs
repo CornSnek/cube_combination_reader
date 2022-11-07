@@ -1,14 +1,14 @@
 use std::io::Read;
 use super::error::CSError;
-pub struct TUI{
-    cdll:super::CubeDLL,
-    done_program:bool    
-}
 macro_rules! ErrToCSErr{
     ($e:tt)=>{ Err(CSError::OtherError(Box::new($e))) }
 }
 macro_rules! return_if_error{
     ($p:expr)=>(if let Err(e)=$p{ return ErrToCSErr!(e) })
+}
+pub struct TUI{
+    cdll:super::CubeDLL,
+    done_program:bool    
 }
 impl TUI{
     pub fn new()->Self{
@@ -39,8 +39,16 @@ impl TUI{
                 for cube_str in &args[1..]{
                     self.cdll.point_to(cube_str.to_string())?;
                     self.cdll.destroy_at_p()?;
-                    println!("Cube \"{cube_str}\" and its links have been destroyed.")
+                    println!("Cube \"{cube_str}\" and its links have been destroyed.");
                 }
+            }
+            "rename"=>{
+                if args.len()!=4||args[2]!="to"{
+                    return Err(CSError::InvalidArguments("TUI::do_command","<rename (cube) to (new_name)>"))
+                }
+                self.cdll.point_to(args[1].to_string())?;
+                self.cdll.rename_at_p(args[3].to_string())?;
+                println!("Cube \"{}\" renamed to \"{}\"",args[1],args[3]);
             }
             "read"=>{
                 if args.len()==1{
@@ -55,7 +63,7 @@ impl TUI{
                 self.cdll.get_info_cube_paths();
             }
             "link"|"fuse"=>{
-                if args.len()!=5{
+                if args.len()!=5||args[2]!="with"{
                     return Err(CSError::InvalidArguments("TUI::do_command","<link|fuse (cube_a) with (cube_b1) (cube_b2)>"))
                 }
                 self.cdll.point_to(args[1].to_string())?;
@@ -115,7 +123,7 @@ impl TUI{
             "usage"=>{
                 println!("Usage: Write names of cubes and their tiers and fusions with other cubes.\n\
                 + means that more than one set of arguments can be repeated enclosed in ()+ (Example: add cube1 0 cube2 1 cube3 3\n\
-                Commands: <add ((cube_name) (Tier))+>,<remove|drop|destroy (cube_name)+>,<read (cube_name)+>,<read_all>,<link|fuse (cube_a) with (cube_b1) (cube_b2)>\n\
+                Commands: <add ((cube_name) (Tier))+>,<remove|drop|destroy (cube_name)+>,<rename (cube_name) to (new_cube_name)>,<read (cube_name)+>,<read_all>,<link|fuse (cube_a) with (cube_b1) (cube_b2)>\n\
                 <unlink_fuses (cube_name)+>,<clear_all>,<change_tier (cube_name) (this_tier)>\n\
                 <save_to|write_to (file_name)>,<load_from (file_name)>,<exit>");
             }
@@ -160,10 +168,10 @@ impl TUI{
         let mut bufread=BufReader::new(from_file);
         let mut str=String::new();
         return_if_error!{bufread.read_to_string(&mut str)}
-        let parsed_str:Box<_>=str.split_whitespace().filter(|&str| str!="name:"&&str!="tier:"&&str!="fused_by:"&&str!="converts_to:")
+        let parsed_str:Box<_>=str.split_whitespace().filter(|&str| str!=SWF!(N)&&str!=SWF!(T)&&str!=SWF!(FB)&&str!=SWF!(CT))
             .enumerate().filter_map(|(i,s)| if let 3=i%4{ None }else{ Some(s) }).collect(); //Remove fuse_tier and converts_to
         if parsed_str.len()%3!=0{
-            return Err(CSError::ParseError("TUI::read_to_file",format!("Incorrect format <name: N; tier: I; fuse_tier: I; fused_by: (N|N,)*N|N; converts_to: (N)+;>, where N are cube names and I is an integer")))
+            return Err(CSError::ParseError("TUI::read_to_file",format!(concat!("Incorrect format <",SWF!(N)," N; ",SWF!(T)," I; ",SWF!(FB)," I; ",SWF!(CT)," (N|N,)*N|N; converts_to: (N)+;>, where N are cube names and I is an integer"))))
         }
         self.cdll.remove_all_cubes();
         let mut link_strs:Vec<[&str;3]>=Vec::new();
