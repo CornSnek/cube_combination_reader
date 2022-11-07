@@ -47,14 +47,21 @@ impl CubeStruct{
     }
     fn add_to(&mut self,other:&Link<Self>)->Result<(),error::CSError>{
         let None=self.converts_to.insert(other.borrow().name.clone(),other.clone()) else{
-            return Err(error::CSError::LinkError("CubeStruct::add_to"))
+            return Err(error::CSError::OccupiedValue("CubeStruct::add_to"))
         };
         Ok(())
     }
-    fn add_by(&mut self,other:&Link<Self>,other2:&Link<Self>)->Result<(),error::CSError>{
+    fn add_fb_pair(&mut self,other:&Link<Self>,other2:&Link<Self>)->Result<(),error::CSError>{
         let key=FuseKey::new_pair(&other.borrow().name,&other2.borrow().name);
         let None=self.fused_by.insert(key,[other.clone(),other2.clone()]) else{
-            return Err(error::CSError::LinkError("CubeStruct::add_by"))
+            return Err(error::CSError::OccupiedValue("CubeStruct::add_fb_pair"))
+        };
+        Ok(())
+    }
+    fn add_fb_single(&mut self,other:&Link<Self>)->Result<(),error::CSError>{
+        let key=FuseKey::new_single(&other.borrow().name);
+        let None=self.fused_by.insert(key,[other.clone(),other.clone()]) else{ //Make it so that the array returns the same Rc twice for single FuseKeys
+            return Err(error::CSError::OccupiedValue("CubeStruct::add_fb_single"))
         };
         Ok(())
     }
@@ -70,6 +77,7 @@ impl CubeStruct{
                     }
                     FuseKey::Single(k0)=>{
                         str.push_str(k0.as_str());
+                        str.push('?');
                     }
                 }
                 if i!=self.fused_by.len()-1{ str.push(','); }
@@ -104,12 +112,15 @@ impl Display for CubeStruct{
             for (i,k) in self.fused_by.keys().enumerate(){
                 match k{
                     FuseKey::Pair(k0,k1)=>{
+                        str.push('[');
                         str.push_str(k0.as_str());
                         str.push('|');
                         str.push_str(k1.as_str());
+                        str.push(']');
                     }
                     FuseKey::Single(k0)=>{
                         str.push_str(k0.as_str());
+                        str.push('?');
                     }
                 }
                 if i!=self.fused_by.len()-1{ str.push(','); }
@@ -144,12 +155,11 @@ impl CubeDLL{
         Ok(())
     }
     fn point_to(&mut self,name:String)->Result<(),error::CSError>{
-        if let Some(csl)=self.hashmap.get(&name){
-            self.pointer=Some(csl.clone());
-            Ok(())
-        }else{
-            Err(error::CSError::NonExistantName("CubeDLL::point_to",name.clone()))
-        }
+        let Some(csl)=self.hashmap.get(&name) else{
+            return Err(error::CSError::NonExistantName("CubeDLL::point_to",name.clone()))
+        };
+        self.pointer=Some(csl.clone());
+        Ok(())
     }
     fn remove_all_cubes(&mut self){
         for csl in self.hashmap.values(){ //Remove possible Rc circular references.
@@ -160,25 +170,33 @@ impl CubeDLL{
         self.hashmap.clear();
         self.pointer=None;
     }
-    fn link_at_p_fby(&self,cs_n1:String,cs_n2:String)->Result<(),error::CSError>{
+    fn link_at_p_fb_pair(&self,cs_n1:String,cs_n2:String)->Result<(),error::CSError>{
         let Some(csl1)=self.hashmap.get(&cs_n1) else{
-            return Err(error::CSError::NonExistantName("CubeDLL::link_at_p_fby",cs_n1.clone()))
+            return Err(error::CSError::NonExistantName("CubeDLL::link_at_p_fb_pair",cs_n1.clone()))
         };
         let Some(csl2)=self.hashmap.get(&cs_n2) else{
-            return Err(error::CSError::NonExistantName("CubeDLL::link_at_p_fby",cs_n2.clone()))
+            return Err(error::CSError::NonExistantName("CubeDLL::link_at_p_fb_pair",cs_n2.clone()))
         };
-        let Some(csl_p)=&self.pointer else {return Err(error::CSError::NullPointer("CubeDLL::link_at_p_fby")) };
+        let Some(csl_p)=&self.pointer else {return Err(error::CSError::NullPointer("CubeDLL::link_at_p_fb_pair")) };
         if csl1.borrow().name==csl_p.borrow().name||csl2.borrow().name==csl_p.borrow().name {
-            return Err(error::CSError::SameStruct("CubeDLL::link_at_p_fby",csl_p.borrow().name.clone()))
+            return Err(error::CSError::SameStruct("CubeDLL::link_at_p_fb_pair",csl_p.borrow().name.clone()))
         }
-        csl_p.borrow_mut().add_by(csl1,csl2)?;
+        csl_p.borrow_mut().add_fb_pair(csl1,csl2)?;
         csl1.borrow_mut().add_to(&csl_p)?;
         if csl1.borrow().name==csl2.borrow().name{ return Ok(()) } //Don't rewrite twice if csl2 is the same as csl1.
         csl2.borrow_mut().add_to(&csl_p)?;
         Ok(())
     }
+    fn link_at_p_fb_single(&self,cs_n:String)->Result<(),error::CSError>{
+        let Some(csl)=self.hashmap.get(&cs_n) else{
+            return Err(error::CSError::NonExistantName("CubeDLL::link_at_p_fb_single",cs_n.clone()))
+        };
+        let Some(csl_p)=&self.pointer else {return Err(error::CSError::NullPointer("CubeDLL::link_at_p_fb_pair")) };
+        csl_p.borrow_mut().add_fb_single(csl)?;
+        Ok(())
+    }
     fn unlink_at_p_fby(&self)->Result<bool,error::CSError>{ //TODO: Change this.
-        let Some(csl)=&self.pointer else{ return Err(error::CSError::NullPointer("CubeDLL::link_at_p_fby")) };
+        let Some(csl)=&self.pointer else{ return Err(error::CSError::NullPointer("CubeDLL::unlink_at_p_fby")) };
         csl.borrow_mut().fused_by.clear();
         Ok(true)
     }
@@ -269,19 +287,21 @@ impl CubeDLL{
             let mut cs_str=String::new();
             cs_str+="fused_by: [";
             for (i,k) in cs.fused_by.keys().enumerate(){
-                cs_str.push('"');
                 match k{
                     FuseKey::Pair(k0,k1)=>{
+                        cs_str.push('"');
                         cs_str.push_str(k0.as_str());
                         cs_str.push_str("\"|\"");
                         cs_str.push_str(k1.as_str());
+                        cs_str.push('"');
                         
                     }
                     FuseKey::Single(k0)=>{
+                        cs_str.push('"');
                         cs_str.push_str(k0.as_str());
+                        cs_str.push_str("\"?");
                     }
                 }
-                cs_str.push('"');
                 if i!=cs.fused_by.len()-1{ cs_str.push(','); }
             }
             cs_str+="]";

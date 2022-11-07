@@ -1,7 +1,7 @@
 use std::{fmt::Formatter};
 #[allow(dead_code)]
 pub enum CSError{
-    LinkError(&'static str),
+    OccupiedValue(&'static str),
     NonExistantName(&'static str,String),
     NullPointer(&'static str),
     SameStruct(&'static str,String),
@@ -14,7 +14,7 @@ pub enum CSError{
 impl std::fmt::Display for CSError{
     fn fmt(&self,f:&mut Formatter)->Result<(),std::fmt::Error>{
             match self{
-                CSError::LinkError(_)=>write!(f,"CubeStruct has already been linked"),
+                CSError::OccupiedValue(_)=>write!(f,"CubeStruct has already been linked/occupied"),
                 CSError::NonExistantName(_,str)=>write!(f,"Cube name \"{}\" not found",str),
                 CSError::NullPointer(_)=>write!(f,"CubeDLL pointer does not point to anything"),
                 CSError::SameStruct(_,str)=>write!(f,"CubeDLL pointer linking points to the same cube name \"{}\" (disallowed)",str),
@@ -29,7 +29,7 @@ impl std::fmt::Display for CSError{
 impl std::fmt::Debug for CSError{
     fn fmt(&self, f: &mut std::fmt::Formatter)->std::fmt::Result {
         match self{
-            CSError::LinkError(func) => write!(f, "{{ CSError type: Link, function: {func} }}"),
+            CSError::OccupiedValue(func) => write!(f, "{{ CSError type: Link, function: {func} }}"),
             CSError::NonExistantName(func,_) => write!(f, "{{ CSError type: NonExistantName, function: {func} }}"),
             CSError::NullPointer(func) => write!(f, "{{ CSError type: NullPointer, function: {func} }}"),
             CSError::SameStruct(func,_) => write!(f, "{{ CSError type: SameStruct, function: {func} }}"),
