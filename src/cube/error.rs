@@ -1,8 +1,7 @@
 use std::{fmt::Formatter};
 #[allow(dead_code)]
 pub enum CSError{
-    OccupiedValue(&'static str),
-    NonExistantName(&'static str,String),
+    NonExistentName(&'static str,String),
     NullPointer(&'static str),
     SameStruct(&'static str,String),
     InvalidArguments(&'static str,&'static str),
@@ -14,8 +13,7 @@ pub enum CSError{
 impl std::fmt::Display for CSError{
     fn fmt(&self,f:&mut Formatter)->Result<(),std::fmt::Error>{
             match self{
-                CSError::OccupiedValue(_)=>write!(f,"CubeStruct has already been linked/occupied"),
-                CSError::NonExistantName(_,str)=>write!(f,"Cube name \"{}\" not found",str),
+                CSError::NonExistentName(_,str)=>write!(f,"Cube name(s) {} not found",str),
                 CSError::NullPointer(_)=>write!(f,"CubeDLL pointer does not point to anything"),
                 CSError::SameStruct(_,str)=>write!(f,"CubeDLL pointer linking points to the same cube name \"{}\" (disallowed)",str),
                 CSError::InvalidArguments(_,str)=>write!(f,"Invalid arguments given in program. Correct usage: \"{}\"",str),
@@ -29,8 +27,7 @@ impl std::fmt::Display for CSError{
 impl std::fmt::Debug for CSError{
     fn fmt(&self, f: &mut std::fmt::Formatter)->std::fmt::Result {
         match self{
-            CSError::OccupiedValue(func) => write!(f, "{{ CSError type: OccupiedValue, function: {func} }}"),
-            CSError::NonExistantName(func,_) => write!(f, "{{ CSError type: NonExistantName, function: {func} }}"),
+            CSError::NonExistentName(func,_) => write!(f, "{{ CSError type: NonExistentName, function: {func} }}"),
             CSError::NullPointer(func) => write!(f, "{{ CSError type: NullPointer, function: {func} }}"),
             CSError::SameStruct(func,_) => write!(f, "{{ CSError type: SameStruct, function: {func} }}"),
             CSError::InvalidArguments(func,_) => write!(f, "{{ CSError type: InvalidArguments, function: {func} }}"),

@@ -45,38 +45,44 @@ impl CubeStruct{
     fn new(name:String,tier:i32)->Self{
         Self{name,tier,converts_to:HashMap::new(),fused_by:HashMap::new()}
     }
-    fn add_to(&mut self,other:&Link)->Result<(),error::CSError>{
-        let None=self.converts_to.insert(other.borrow().name.clone(),other.clone()) else{
-            return Err(error::CSError::OccupiedValue("CubeStruct::add_to"))
+    fn add_to(&mut self,other:&Link){
+        if self.converts_to.insert(other.borrow().name.clone(),other.clone()).is_some(){
+            println!("Cube \"{}\" has already been added for \"{}\" as a conversion",&other.borrow().name,self.name);
         };
-        Ok(())
     }
-    fn add_fb_pair(&mut self,other:&Link,other2:&Link)->Result<(),error::CSError>{
-        let key=FuseKey::new_pair(&other.borrow().name,&other2.borrow().name);
-        let None=self.fused_by.insert(key,[other.clone(),other2.clone()]) else{
-            return Err(error::CSError::OccupiedValue("CubeStruct::add_fb_pair"))
-        };
-        Ok(())
-    }
-    fn add_fb_single(&mut self,other:&Link)->Result<(),error::CSError>{
-        let key=FuseKey::new_single(&other.borrow().name);
-        let None=self.fused_by.insert(key,[other.clone(),other.clone()]) else{ //Make it so that the array returns the same Rc twice for single FuseKeys
-            return Err(error::CSError::OccupiedValue("CubeStruct::add_fb_single"))
-        };
-        Ok(())
-    }
-    fn merge_single_keys(&mut self,l1:&Link,l2:&Link)->Result<(),error::CSError>{
-        let (n1,n2)=(&l1.borrow().name,&l2.borrow().name);
-        match (self.fused_by.remove(&FuseKey::new_single(n1)).is_none(),self.fused_by.remove(&FuseKey::new_single(n2)).is_none()){
-            (true,true)=>{ return Err(error::CSError::EmptyValue("CubeStruct::merge_single_keys",n1.clone()+&" and ".to_string()+&n2.clone())) }
-            (true,false)=>{ return Err(error::CSError::EmptyValue("CubeStruct::merge_single_keys",n1.clone())) }
-            (false,true)=>{ return Err(error::CSError::EmptyValue("CubeStruct::merge_single_keys",n2.clone())) }
-            _=>{}
+    fn remove_to_maybe(&mut self,other:&Link){
+        if other.borrow().fused_by.keys().any(|fuse_key| fuse_key.contains_key(&self.name)){
+            println!("Cube \"{}\" cannot be removed for \"{}\" as a conversion (Contains other keys)",&other.borrow().name,self.name);
+        }else if self.converts_to.remove(&other.borrow().name).is_none(){
+            println!("Cube \"{}\" has already been removed for \"{}\" as a conversion",&other.borrow().name,self.name);
         }
-        let None=self.fused_by.insert(FuseKey::new_pair(n1,n2),[l1.clone(),l2.clone()]) else{
-            return Err(error::CSError::OccupiedValue("CubeStruct::merge_single_keys"))
+    }
+    fn add_fb_pair(&mut self,other:&Link,other2:&Link){
+        let key=FuseKey::new_pair(&other.borrow().name,&other2.borrow().name);
+        if self.fused_by.insert(key,[other.clone(),other2.clone()]).is_some(){
+            println!("Cubes \"{}\" and \"{}\" have already been added as a key to \"{}\"",&other.borrow().name,&other2.borrow().name,self.name);
         };
-        Ok(())
+    }
+    fn add_fb_single(&mut self,other:&Link){
+        let key=FuseKey::new_single(&other.borrow().name);
+        if self.fused_by.insert(key,[other.clone(),other.clone()]).is_some(){ //Make it so that the array returns the same Rc twice for single FuseKeys
+            println!("Cube \"{}\" has already been added as a key to \"{}\"",&other.borrow().name,self.name);
+        }
+    }
+    fn remove_fb_key(&mut self,key:FuseKey){
+        if self.fused_by.remove(&key).is_some(){
+            println!("Fuse key has been deleted for cube {}",self.name);
+        }else{
+            println!("Fuse key has already been deleted for cube {}",self.name);
+        }
+    }
+    fn merge_single_keys(&mut self,l1:&Link,l2:&Link){
+        let (n1,n2)=(&l1.borrow().name,&l2.borrow().name);
+        self.fused_by.remove(&FuseKey::new_single(n1));
+        self.fused_by.remove(&FuseKey::new_single(n2));
+        if self.fused_by.insert(FuseKey::new_pair(n1,n2),[l1.clone(),l2.clone()]).is_some() {
+            println!("Cubes \"{}\" and \"{}\" have already been added as a key to \"{}\"",&l1.borrow().name,&l2.borrow().name,self.name);
+        };
     }
     fn save_write_str(&self)->String{
         let fb_str={
@@ -169,7 +175,7 @@ impl CubeDLL{
     }
     fn point_to(&mut self,name:String)->Result<(),error::CSError>{
         let Some(csl)=self.hashmap.get(&name) else{
-            return Err(error::CSError::NonExistantName("CubeDLL::point_to",name.clone()))
+            return Err(error::CSError::NonExistentName("CubeDLL::point_to",name.clone()))
         };
         self.pointer=Some(csl.clone());
         Ok(())
@@ -185,37 +191,67 @@ impl CubeDLL{
     }
     fn link_at_p_fb_pair(&self,cs_n1:String,cs_n2:String)->Result<(),error::CSError>{
         let Some(csl1)=self.hashmap.get(&cs_n1) else{
-            return Err(error::CSError::NonExistantName("CubeDLL::link_at_p_fb_pair",cs_n1.clone()))
+            return Err(error::CSError::NonExistentName("CubeDLL::link_at_p_fb_pair",cs_n1.clone()))
         };
         let Some(csl2)=self.hashmap.get(&cs_n2) else{
-            return Err(error::CSError::NonExistantName("CubeDLL::link_at_p_fb_pair",cs_n2.clone()))
+            return Err(error::CSError::NonExistentName("CubeDLL::link_at_p_fb_pair",cs_n2.clone()))
         };
         let Some(csl_p)=&self.pointer else {return Err(error::CSError::NullPointer("CubeDLL::link_at_p_fb_pair")) };
         if csl1.borrow().name==csl_p.borrow().name||csl2.borrow().name==csl_p.borrow().name {
             return Err(error::CSError::SameStruct("CubeDLL::link_at_p_fb_pair",csl_p.borrow().name.clone()))
         }
-        csl_p.borrow_mut().add_fb_pair(csl1,csl2)?;
-        csl1.borrow_mut().add_to(&csl_p)?;
+        csl_p.borrow_mut().add_fb_pair(csl1,csl2);
+        csl1.borrow_mut().add_to(&csl_p);
         if csl1.borrow().name==csl2.borrow().name{ return Ok(()) } //Don't rewrite twice if csl2 is the same as csl1.
-        csl2.borrow_mut().add_to(&csl_p)?;
+        csl2.borrow_mut().add_to(&csl_p);
         Ok(())
     }
     fn link_at_p_fb_single(&self,cs_n:String)->Result<(),error::CSError>{
         let Some(csl)=self.hashmap.get(&cs_n) else{
-            return Err(error::CSError::NonExistantName("CubeDLL::link_at_p_fb_single",cs_n.clone()))
+            return Err(error::CSError::NonExistentName("CubeDLL::link_at_p_fb_single",cs_n.clone()))
         };
         let Some(csl_p)=&self.pointer else {return Err(error::CSError::NullPointer("CubeDLL::link_at_p_fb_pair")) };
         if csl.borrow().name==csl_p.borrow().name {
             return Err(error::CSError::SameStruct("CubeDLL::link_at_p_fb_single",csl_p.borrow().name.clone()))
         }
-        csl_p.borrow_mut().add_fb_single(csl)?;
-        csl.borrow_mut().add_to(&csl_p)?;
+        csl_p.borrow_mut().add_fb_single(csl);
+        csl.borrow_mut().add_to(&csl_p);
         Ok(())
     }
-    fn unlink_at_p_fby(&self)->Result<bool,error::CSError>{ //TODO: Change this.
-        let Some(csl)=&self.pointer else{ return Err(error::CSError::NullPointer("CubeDLL::unlink_at_p_fby")) };
-        csl.borrow_mut().fused_by.clear();
-        Ok(true)
+    fn unlink_at_p_fb(&self)->Result<(),error::CSError>{
+        let Some(csl_p)=&self.pointer else{ return Err(error::CSError::NullPointer("CubeDLL::unlink_at_p_fb")) };
+        csl_p.borrow_mut().fused_by.clear();
+        Ok(())
+    }
+    fn unlink_at_p_fb_keys(&self,cs_n1:String,cs_opt:Option<String>)->Result<(),error::CSError>{
+        let Some(csl_p)=&self.pointer else{ return Err(error::CSError::NullPointer("CubeDLL::unlink_at_p_fb_keys")) };
+        let Some(csl1)=self.hashmap.get(&cs_n1) else{
+            return Err(error::CSError::NonExistentName("CubeDLL::unlink_at_p_fused_by",cs_n1.clone()))
+        };
+        if csl1.borrow().name==csl_p.borrow().name {
+            return Err(error::CSError::SameStruct("CubeDLL::unlink_at_p_fused_by",csl_p.borrow().name.clone()))
+        }
+        match cs_opt{
+            Some(cs_n2)=>{
+                let Some(csl2)=self.hashmap.get(&cs_n2) else{
+                    return Err(error::CSError::NonExistentName("CubeDLL::unlink_at_p_fused_by",cs_n2.clone()))
+                };
+                if csl2.borrow().name==csl_p.borrow().name {
+                    return Err(error::CSError::SameStruct("CubeDLL::unlink_at_p_fused_by",csl_p.borrow().name.clone()))
+                }
+                let key=FuseKey::new_pair(&csl1.borrow().name.to_string(),&csl2.borrow().name.to_string());
+                csl_p.borrow_mut().remove_fb_key(key);
+                csl1.borrow_mut().remove_to_maybe(&csl_p);
+                if csl1.borrow().name==csl2.borrow().name{ return Ok(()) } //Don't rewrite twice if csl2 is the same as csl1.
+                csl2.borrow_mut().remove_to_maybe(&csl_p);
+            }
+            None=>{
+                let key=FuseKey::new_single(&csl1.borrow().name.to_string());
+                csl_p.borrow_mut().remove_fb_key(key);
+                csl1.borrow_mut().remove_to_maybe(&csl_p);
+            }
+        }
+        Ok(())
     }
     ///Remove all references of this CubeStruct at pointer including the pointer as well.
     fn destroy_at_p(&mut self)->Result<(),error::CSError>{
@@ -344,13 +380,20 @@ impl CubeDLL{
     fn merge_keys_at_p(&self,cs_n1:String,cs_n2:String)->Result<(),error::CSError>{
         let Some(csl_p)=&self.pointer else {return Err(error::CSError::NullPointer("CubeDLL::change_tier_at_p")) };
         let Some(csl1)=self.hashmap.get(&cs_n1) else{
-            return Err(error::CSError::NonExistantName("CubeDLL::merge_keys_at_p",cs_n1.clone()))
+            return Err(error::CSError::NonExistentName("CubeDLL::merge_keys_at_p",cs_n1.clone()))
         };
         let Some(csl2)=self.hashmap.get(&cs_n2) else{
-            return Err(error::CSError::NonExistantName("CubeDLL::merge_keys_at_p",cs_n2.clone()))
+            return Err(error::CSError::NonExistentName("CubeDLL::merge_keys_at_p",cs_n2.clone()))
         };
-        csl_p.borrow_mut().merge_single_keys(csl1,csl2)?;
-        Ok(())
+        match (csl_p.borrow().fused_by.get(&FuseKey::new_single(&cs_n1)).is_none(),csl_p.borrow().fused_by.get(&FuseKey::new_single(&cs_n2)).is_none()){
+            (true,true)=>Err(error::CSError::NonExistentName("CubeDLL::merge_keys_at_p",cs_n1+" and "+&cs_n2)),
+            (true,false)=>Err(error::CSError::NonExistentName("CubeDLL::merge_keys_at_p",cs_n1)),
+            (false,true)=>Err(error::CSError::NonExistentName("CubeDLL::merge_keys_at_p",cs_n2)),
+            _=>{
+                csl_p.borrow_mut().merge_single_keys(csl1,csl2);
+                Ok(())
+            }
+        }
     }
 }
 impl Display for CubeDLL{
