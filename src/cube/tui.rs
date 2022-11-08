@@ -72,13 +72,21 @@ impl TUI{
             }
             "link_single"=>{
                 if args.len()<3||args[2]!="with"{
-                    return Err(CSError::InvalidArguments("TUI::do_command","<link_single (cube_a) with (cubes)+>"))
+                    return Err(CSError::InvalidArguments("TUI::do_command","<link_single (cube_a) with (cube)+>"))
                 }
                 self.cdll.point_to(args[1].to_string())?;
                 for arg in &args[3..]{
                     self.cdll.link_at_p_fb_single(arg.to_string())?;
                     println!("Successfully linked cube \"{}\" with \"{}\"",args[1],arg);
                 }
+            }
+            "merge"=>{
+                if args.len()!=5||args[3]!="in"{
+                    return Err(CSError::InvalidArguments("TUI::do_command","<merge (cube_a) (cube_b) in (this_cube)>"))
+                }
+                self.cdll.point_to(args[4].to_string())?;
+                self.cdll.merge_keys_at_p(args[1].to_string(),args[2].to_string())?;
+                println!("Successfully merged keys \"{}\" with \"{}\" for \"{}\"",args[1],args[2],args[4]);
             }
             "unlink_fuses"=>{
                 if args.len()==1{
@@ -134,8 +142,9 @@ impl TUI{
                 println!("Usage: Write names of cubes and their tiers and fusions with other cubes.\n\
                 + means that more than one set of arguments can be repeated enclosed in ()+ (Example: add cube1 0 cube2 1 cube3 3\n\
                 Commands: <add ((cube_name) (Tier))+>,<remove|drop|destroy (cube_name)+>,<rename (cube_name) to (new_cube_name)>,<read (cube_name)+>,\n\
-                <read_all>,<link_pair|fuse (cube_a) with (cube_b1) (cube_b2)>,<link_single (cube_a) with (cube)+>\n\
-                <unlink_fuses (cube_name)+>,<remove_all|drop_all|destroy_all>,<change_tier (cube_name) (this_tier)>\n\
+                <read_all>,<link_pair|fuse (cube_a) with (cube_b1) (cube_b2)>,<link_single (cube_a) with (cube)+>,\n\
+                <merge (cube_a) (cube_b) in (this_cube)><unlink_fuses (cube_name)+>,\n\
+                <remove_all|drop_all|destroy_all>,<change_tier (cube_name) (this_tier)>\n\
                 <save_to|write_to (file_name)>,<load_from (file_name)>,<exit>");
             }
             invalid=>{

@@ -21,7 +21,7 @@ impl std::fmt::Display for CSError{
                 CSError::InvalidArguments(_,str)=>write!(f,"Invalid arguments given in program. Correct usage: \"{}\"",str),
                 CSError::DuplicateName(_,str)=>write!(f,"Cube name \"{}\" already exists",str),
                 CSError::ParseError(_,str)=>write!(f,"Unable to parse string from file. Reason: {}",str),
-                CSError::EmptyValue(_,str)=>write!(f,"Unable to get value for key \"{}\"",str),
+                CSError::EmptyValue(_,str)=>write!(f,"Empty value for key(s) {}",str),
                 CSError::OtherError(e)=>std::fmt::Display::fmt(e,f)
             }
     }
@@ -29,7 +29,7 @@ impl std::fmt::Display for CSError{
 impl std::fmt::Debug for CSError{
     fn fmt(&self, f: &mut std::fmt::Formatter)->std::fmt::Result {
         match self{
-            CSError::OccupiedValue(func) => write!(f, "{{ CSError type: Link, function: {func} }}"),
+            CSError::OccupiedValue(func) => write!(f, "{{ CSError type: OccupiedValue, function: {func} }}"),
             CSError::NonExistantName(func,_) => write!(f, "{{ CSError type: NonExistantName, function: {func} }}"),
             CSError::NullPointer(func) => write!(f, "{{ CSError type: NullPointer, function: {func} }}"),
             CSError::SameStruct(func,_) => write!(f, "{{ CSError type: SameStruct, function: {func} }}"),

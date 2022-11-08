@@ -1,6 +1,6 @@
 ///For format!(...) and to be consistent for saving/loading the same characters.
 macro_rules! SWF{
-    ()=>{ concat!(SWF!(N)," {}; ",SWF!(T)," {}; ",SWF!(FB)," {}; ",SWF!(CT)," {};") };
+    (SAVE_STR)=>{ concat!(SWF!(N)," {}; ",SWF!(T)," {}; ",SWF!(FB)," {}; ",SWF!(CT)," {};") };
     (N)=>{"n:"};
     (T)=>{"t:"};
     (FB)=>{"fb:"};
@@ -10,12 +10,12 @@ mod tui;
 pub mod error;
 pub use tui::TUI;
 use std::{rc::Rc, cell::RefCell, collections::HashMap, fmt::{Display, Formatter}, hash::Hash};
-type Link<T>=Rc<RefCell<T>>;
+type Link=Rc<RefCell<CubeStruct>>;
 struct CubeStruct{
     name:String,
     tier:i32,
-    converts_to:HashMap<String,Link<CubeStruct>>,
-    fused_by:HashMap<FuseKey,[Link<CubeStruct>;2]>
+    converts_to:HashMap<String,Link>,
+    fused_by:HashMap<FuseKey,[Link;2]>
 }
 ///Don't construct enums directly due to different hash possibility. Use FuseKeys::new_* implementation functions instead.
 #[derive(Eq, Hash, PartialEq, Clone, Debug)]
@@ -45,23 +45,36 @@ impl CubeStruct{
     fn new(name:String,tier:i32)->Self{
         Self{name,tier,converts_to:HashMap::new(),fused_by:HashMap::new()}
     }
-    fn add_to(&mut self,other:&Link<Self>)->Result<(),error::CSError>{
+    fn add_to(&mut self,other:&Link)->Result<(),error::CSError>{
         let None=self.converts_to.insert(other.borrow().name.clone(),other.clone()) else{
             return Err(error::CSError::OccupiedValue("CubeStruct::add_to"))
         };
         Ok(())
     }
-    fn add_fb_pair(&mut self,other:&Link<Self>,other2:&Link<Self>)->Result<(),error::CSError>{
+    fn add_fb_pair(&mut self,other:&Link,other2:&Link)->Result<(),error::CSError>{
         let key=FuseKey::new_pair(&other.borrow().name,&other2.borrow().name);
         let None=self.fused_by.insert(key,[other.clone(),other2.clone()]) else{
             return Err(error::CSError::OccupiedValue("CubeStruct::add_fb_pair"))
         };
         Ok(())
     }
-    fn add_fb_single(&mut self,other:&Link<Self>)->Result<(),error::CSError>{
+    fn add_fb_single(&mut self,other:&Link)->Result<(),error::CSError>{
         let key=FuseKey::new_single(&other.borrow().name);
         let None=self.fused_by.insert(key,[other.clone(),other.clone()]) else{ //Make it so that the array returns the same Rc twice for single FuseKeys
             return Err(error::CSError::OccupiedValue("CubeStruct::add_fb_single"))
+        };
+        Ok(())
+    }
+    fn merge_single_keys(&mut self,l1:&Link,l2:&Link)->Result<(),error::CSError>{
+        let (n1,n2)=(&l1.borrow().name,&l2.borrow().name);
+        match (self.fused_by.remove(&FuseKey::new_single(n1)).is_none(),self.fused_by.remove(&FuseKey::new_single(n2)).is_none()){
+            (true,true)=>{ return Err(error::CSError::EmptyValue("CubeStruct::merge_single_keys",n1.clone()+&" and ".to_string()+&n2.clone())) }
+            (true,false)=>{ return Err(error::CSError::EmptyValue("CubeStruct::merge_single_keys",n1.clone())) }
+            (false,true)=>{ return Err(error::CSError::EmptyValue("CubeStruct::merge_single_keys",n2.clone())) }
+            _=>{}
+        }
+        let None=self.fused_by.insert(FuseKey::new_pair(n1,n2),[l1.clone(),l2.clone()]) else{
+            return Err(error::CSError::OccupiedValue("CubeStruct::merge_single_keys"))
         };
         Ok(())
     }
@@ -92,7 +105,7 @@ impl CubeStruct{
             }
             str
         };
-        format!(SWF!(),self.name.as_str(),self.tier.to_string(),fb_str,ct_str)
+        format!(SWF!(SAVE_STR),self.name.as_str(),self.tier.to_string(),fb_str,ct_str)
     }
 }
 impl Display for CubeStruct{
@@ -137,8 +150,8 @@ impl Drop for CubeStruct{ //Printing drop for debugging.
     }
 }*/
 struct CubeDLL{
-    pointer:Option<Link<CubeStruct>>,
-    hashmap:HashMap<String,Link<CubeStruct>>
+    pointer:Option<Link>,
+    hashmap:HashMap<String,Link>
 }
 impl Default for CubeDLL{
     fn default()->Self{
@@ -192,7 +205,11 @@ impl CubeDLL{
             return Err(error::CSError::NonExistantName("CubeDLL::link_at_p_fb_single",cs_n.clone()))
         };
         let Some(csl_p)=&self.pointer else {return Err(error::CSError::NullPointer("CubeDLL::link_at_p_fb_pair")) };
+        if csl.borrow().name==csl_p.borrow().name {
+            return Err(error::CSError::SameStruct("CubeDLL::link_at_p_fb_single",csl_p.borrow().name.clone()))
+        }
         csl_p.borrow_mut().add_fb_single(csl)?;
+        csl.borrow_mut().add_to(&csl_p)?;
         Ok(())
     }
     fn unlink_at_p_fby(&self)->Result<bool,error::CSError>{ //TODO: Change this.
@@ -322,6 +339,17 @@ impl CubeDLL{
     fn change_tier_at_p(&self,to_this_tier:i32)->Result<(),error::CSError>{
         let Some(csl_p)=&self.pointer else {return Err(error::CSError::NullPointer("CubeDLL::change_tier_at_p")) };
         csl_p.borrow_mut().tier=to_this_tier;
+        Ok(())
+    }
+    fn merge_keys_at_p(&self,cs_n1:String,cs_n2:String)->Result<(),error::CSError>{
+        let Some(csl_p)=&self.pointer else {return Err(error::CSError::NullPointer("CubeDLL::change_tier_at_p")) };
+        let Some(csl1)=self.hashmap.get(&cs_n1) else{
+            return Err(error::CSError::NonExistantName("CubeDLL::merge_keys_at_p",cs_n1.clone()))
+        };
+        let Some(csl2)=self.hashmap.get(&cs_n2) else{
+            return Err(error::CSError::NonExistantName("CubeDLL::merge_keys_at_p",cs_n2.clone()))
+        };
+        csl_p.borrow_mut().merge_single_keys(csl1,csl2)?;
         Ok(())
     }
 }
