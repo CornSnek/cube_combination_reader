@@ -330,8 +330,12 @@ impl CubeDLL{
     fn get_info_p(&self)->Result<(),error::CSError>{
         if let Some(csl)=&self.pointer{
             println!("Info of cube pointer: {}",csl.borrow());
+            for key in csl.borrow().converts_to.keys(){
+                let csl=self.hashmap.get(key).unwrap();
+                println!("Associated fusions: {}",csl.borrow());
+            }
             Ok(())
-        }else{ unreachable!() }
+        }else{ unreachable!("Shouldn't be accessed. Should use point_to()") }
     }
     fn get_info_cube_paths(&self){
         println!("Syntax: fused_by: [fuse key array (single/pair)] => [[this cube name]](tier) => converts_to: [cube name array]");

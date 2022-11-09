@@ -1,6 +1,8 @@
-use std::{fmt::Formatter};
+use std::fmt::Formatter;
+pub type CSResult<T>=Result<T,CSError>;
 pub enum CSError{
     InvalidCommand(String),
+    NameSyntax(String),
     NonExistentName(&'static str,String),
     NullPointer(&'static str),
     SameStruct(&'static str,String),
@@ -14,6 +16,7 @@ impl std::fmt::Display for CSError{
     fn fmt(&self,f:&mut Formatter)->Result<(),std::fmt::Error>{
             match self{
                 Self::InvalidCommand(str)=>write!(f,"'{str}' is not a valid command name. Type 'usage' for valid commands."),
+                Self::NameSyntax(str)=>write!(f,"Cube name {} can only contain the valid characters [0-9a-zA-Z()].",str),
                 Self::NonExistentName(_,str)=>write!(f,"Cube name(s) {} not found",str),
                 Self::NullPointer(_)=>write!(f,"CubeDLL pointer does not point to anything"),
                 Self::SameStruct(_,str)=>write!(f,"CubeDLL pointer linking points to the same cube name \"{}\" (disallowed)",str),
@@ -29,6 +32,7 @@ impl std::fmt::Debug for CSError{
     fn fmt(&self, f: &mut std::fmt::Formatter)->std::fmt::Result {
         match self{
             Self::InvalidCommand(_) => write!(f, "{{ CSError type: InvalidCommand }}"),
+            Self::NameSyntax(_) => write!(f, "{{ CSError type: CubeName }}"),
             Self::NonExistentName(func,_) => write!(f, "{{ CSError type: NonExistentName, function: {func} }}"),
             Self::NullPointer(func) => write!(f, "{{ CSError type: NullPointer, function: {func} }}"),
             Self::SameStruct(func,_) => write!(f, "{{ CSError type: SameStruct, function: {func} }}"),
