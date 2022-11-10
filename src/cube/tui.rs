@@ -41,6 +41,7 @@ mod commands{
         cmd_hm.insert("change_tier",(TUI::change_tier_cmd,"<change_tier (cube_name) (this_tier)>"));
         cmd_hm.insert("get_fusions",(TUI::get_fusions_cmd,"<get_fusions (cube_name)>"));
         cmd_hm.insert("build_tree",(TUI::build_tree_cmd,"<build_tree (cube_name)>"));
+        cmd_hm.insert("starts_with",(TUI::starts_with_cmd,"<starts_with (partial cube_name)>"));
         cmd_hm.insert("usage",(TUI::usage_cmd,"<usage>"));
         cmd_hm
     }
@@ -266,6 +267,18 @@ impl TUI{
         check_valid_cube_name(args[1])?;
         self.cdll.point_to(args[1].to_string())?;
         self.cdll.build_tree_at_p()?;
+        Ok(())
+    }
+    fn starts_with_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
+        if args.len()!=2{
+            return Err(CSError::InvalidArguments(usage))
+        }
+        check_valid_cube_name(args[1])?;
+        println!("Finding cube names starting with {}",args[1]);
+        print!("{}",self.cdll.hashmap.keys().filter(|&k|k.starts_with(args[1])).enumerate().fold(String::new(),
+            |res,t|res+t.0.to_string().as_str()+": "+t.1+"\n"
+        ));
+        return_if_error!(std::io::Write::flush(&mut std::io::stdout()));
         Ok(())
     }
     fn yn_loop(&self,msg:String)->Result<bool,CSError>{
