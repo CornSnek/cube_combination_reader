@@ -71,11 +71,15 @@ impl TUI{
         let hm_command=commands::get_commands_hashmap();
         let mut usage_str_box=hm_command.values().map(|i|i.1.to_string()).collect::<Box<_>>();
         usage_str_box.sort_unstable();
+        let usage_len=usage_str_box.len();
+        let mut usage_i=0usize;
         Self{cdll:Default::default(),
             done_program:false,
             hm_command,
-            usage_str:usage_str_box.iter().flat_map(|s| s.chars().chain("\n".chars())).collect::<String>()
-        }//usage_str_box.concat(), but adds "\n" near the end of each string
+            usage_str:usage_str_box.iter().fold(String::new(),|res,str|{
+                usage_i+=1; res+str+if usage_i!=usage_len{"\n"}else{""}
+            })
+        }//usage_str_box.concat(), but adds "\n" near the end of each string except the last.
     }
     pub fn program_loop(&mut self){
         let mut rl=Editor::<()>::new().expect("Unable to setup program loop.");
