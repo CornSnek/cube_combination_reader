@@ -34,10 +34,18 @@ impl FuseKey{
             Self::Single(s)=>{s==cmp_str}
         }
     }
-    fn as_rewrite_key(&self,old_str:&String,to_str:&String)->Self{
+    fn into_rewrite_key(self,old_str:&String,to_str:&String)->Self{
         match self{
-            Self::Pair(s0,s1)=>{ Self::new_pair(if s0==old_str{to_str}else{s0},if s1==old_str{to_str}else{s1}) },
-            Self::Single(s)=>{ if s==old_str{ Self::new_single(to_str) }else{ self.clone() } }
+            Self::Pair(ref s0,ref s1)=>{ Self::new_pair(if s0==old_str{to_str}else{s0},if s1==old_str{to_str}else{s1}) },
+            Self::Single(ref s)=>{ if s==old_str{ Self::new_single(to_str) }else{ self } }
+        }
+    }
+}
+impl Display for FuseKey{
+    fn fmt(&self, f: &mut Formatter<'_>)->Result<(),std::fmt::Error> {
+        match self{
+            Self::Single(s)=>write!(f,"{s}?"),
+            Self::Pair(s1,s2)=>write!(f,"{s1}/{s2}")
         }
     }
 }
@@ -46,7 +54,9 @@ impl CubeStruct{
         Self{name,tier,converts_to:HashMap::new(),fused_by:HashMap::new()}
     }
     fn add_to(&mut self,other:&Link){
-        if self.converts_to.insert(other.borrow().name.clone(),other.clone()).is_some(){
+        let other_str=other.borrow().name.clone();
+        if other_str=="?"{ return } //Don't populate with ? (Redundant).
+        if self.converts_to.insert(other_str,other.clone()).is_some(){
             println!("Cube \"{}\" has already been added for \"{}\" as a conversion",&other.borrow().name,self.name);
         };
     }
@@ -155,6 +165,7 @@ impl Drop for CubeStruct{ //Printing drop for debugging.
         println!("Dropped CubeStruct \"{}\"",self.name);
     }
 }*/
+use error::CSResult;
 struct CubeDLL{
     pointer:Option<Link>,
     hashmap:HashMap<String,Link>
@@ -165,7 +176,7 @@ impl Default for CubeDLL{
     }
 }
 impl CubeDLL{
-    fn add(&mut self,cs:CubeStruct)->Result<(),error::CSError>{
+    fn add(&mut self,cs:CubeStruct)->CSResult<()>{
         let str=&cs.name.clone();
         let link=Rc::new(RefCell::new(cs));
         let None=self.hashmap.insert(str.clone(),link) else{
@@ -173,9 +184,19 @@ impl CubeDLL{
         };
         Ok(())
     }
-    fn point_to(&mut self,name:String)->Result<(),error::CSError>{
-        let Some(csl)=self.hashmap.get(&name) else{
-            return Err(error::CSError::NonExistentName("CubeDLL::point_to",name.clone()))
+    fn point_to(&mut self,name:String)->CSResult<()>{
+        let csl={
+            match self.hashmap.get(&name){
+                Some(csl) => csl,
+                _ => {
+                    if name=="?"{ //Add ? if not added yet.
+                        self.add(CubeStruct::new("?".to_string(),-1))?;
+                        self.hashmap.get(&"?".to_string()).unwrap()
+                    }else{
+                        return Err(error::CSError::NonExistentName("CubeDLL::point_to",name.clone()))
+                    }
+                }
+            }
         };
         self.pointer=Some(csl.clone());
         Ok(())
@@ -189,7 +210,7 @@ impl CubeDLL{
         self.hashmap.clear();
         self.pointer=None;
     }
-    fn link_at_p_fb_pair(&self,cs_n1:String,cs_n2:String)->Result<(),error::CSError>{
+    fn link_at_p_fb_pair(&self,cs_n1:String,cs_n2:String)->CSResult<()>{
         let Some(csl1)=self.hashmap.get(&cs_n1) else{
             return Err(error::CSError::NonExistentName("CubeDLL::link_at_p_fb_pair",cs_n1.clone()))
         };
@@ -200,13 +221,21 @@ impl CubeDLL{
         if csl1.borrow().name==csl_p.borrow().name||csl2.borrow().name==csl_p.borrow().name {
             return Err(error::CSError::SameStruct("CubeDLL::link_at_p_fb_pair",csl_p.borrow().name.clone()))
         }
+        if csl_p.borrow().name!="?"{
+            if let Some(qcsl)=self.hashmap.get(&"?".to_string()){
+                let key=FuseKey::new_pair(&csl1.borrow().name,&csl2.borrow().name);
+                if qcsl.borrow_mut().fused_by.remove(&key).is_some(){
+                    println!("Cube FuseKey \"{key}\" has been removed for ?");
+                }
+            }
+        }
         csl_p.borrow_mut().add_fb_pair(csl1,csl2);
         csl1.borrow_mut().add_to(&csl_p);
         if csl1.borrow().name==csl2.borrow().name{ return Ok(()) } //Don't rewrite twice if csl2 is the same as csl1.
         csl2.borrow_mut().add_to(&csl_p);
         Ok(())
     }
-    fn link_at_p_fb_single(&self,cs_n:String)->Result<(),error::CSError>{
+    fn link_at_p_fb_single(&self,cs_n:String)->CSResult<()>{
         let Some(csl)=self.hashmap.get(&cs_n) else{
             return Err(error::CSError::NonExistentName("CubeDLL::link_at_p_fb_single",cs_n.clone()))
         };
@@ -214,16 +243,24 @@ impl CubeDLL{
         if csl.borrow().name==csl_p.borrow().name {
             return Err(error::CSError::SameStruct("CubeDLL::link_at_p_fb_single",csl_p.borrow().name.clone()))
         }
+        if csl_p.borrow().name!="?"{
+            if let Some(qcsl)=self.hashmap.get(&"?".to_string()){
+                let key=FuseKey::new_single(&csl.borrow().name);
+                if qcsl.borrow_mut().fused_by.remove(&key).is_some(){
+                    println!("Cube FuseKey \"{key}\" has been removed for ?");
+                }
+            }
+        }
         csl_p.borrow_mut().add_fb_single(csl);
         csl.borrow_mut().add_to(&csl_p);
         Ok(())
     }
-    fn unlink_at_p_fb(&self)->Result<(),error::CSError>{
+    fn unlink_at_p_fb(&self)->CSResult<()>{
         let Some(csl_p)=&self.pointer else{ return Err(error::CSError::NullPointer("CubeDLL::unlink_at_p_fb")) };
         csl_p.borrow_mut().fused_by.clear();
         Ok(())
     }
-    fn unlink_at_p_fb_keys(&self,cs_n1:String,cs_opt:Option<String>)->Result<(),error::CSError>{
+    fn unlink_at_p_fb_keys(&self,cs_n1:String,cs_opt:Option<String>)->CSResult<()>{
         let Some(csl_p)=&self.pointer else{ return Err(error::CSError::NullPointer("CubeDLL::unlink_at_p_fb_keys")) };
         let Some(csl1)=self.hashmap.get(&cs_n1) else{
             return Err(error::CSError::NonExistentName("CubeDLL::unlink_at_p_fused_by",cs_n1.clone()))
@@ -254,7 +291,7 @@ impl CubeDLL{
         Ok(())
     }
     ///Remove all references of this CubeStruct at pointer including the pointer as well.
-    fn destroy_at_p(&mut self)->Result<(),error::CSError>{
+    fn destroy_at_p(&mut self)->CSResult<()>{
         let Some(csl)=self.pointer.take() else{ return Err(error::CSError::NullPointer("CubeDLL::destroy_at_p")) };
         let mut cs=csl.borrow_mut();
         let cs_name=cs.name.clone();
@@ -286,7 +323,7 @@ impl CubeDLL{
         self.hashmap.remove(&cs_name);
         Ok(())
     }
-    fn rename_at_p(&mut self,to_name:String)->Result<(),error::CSError>{
+    fn rename_at_p(&mut self,to_name:String)->CSResult<()>{
         let None=self.hashmap.get(&to_name) else{ return Err(error::CSError::DuplicateName("CubeDLL::rename_at_p",to_name)) };
         let Some(csl)=&self.pointer else{ return Err(error::CSError::NullPointer("CubeDLL::rename_at_p")) };
         let mut cs=csl.borrow_mut();
@@ -318,7 +355,7 @@ impl CubeDLL{
                 let Some(v)=cs_ct_bm.fused_by.remove(fuse_k_old) else{
                     return Err(error::CSError::EmptyValue("CubeDLL::rename_at_p",cs_ct_bm.name.clone()))
                 };
-                cs_ct_bm.fused_by.insert(fuse_k_old.as_rewrite_key(&cs_old_name,&to_name),v);
+                cs_ct_bm.fused_by.insert(fuse_k_old.clone().into_rewrite_key(&cs_old_name,&to_name),v);
             }
         }
         let Some(v)=self.hashmap.remove(&cs_old_name) else{
@@ -327,7 +364,7 @@ impl CubeDLL{
         self.hashmap.insert(to_name,v);
         Ok(())
     }
-    fn get_info_p(&self)->Result<(),error::CSError>{
+    fn get_info_p(&self)->CSResult<()>{
         if let Some(csl)=&self.pointer{
             println!("Info of cube pointer: {}",csl.borrow());
             for key in csl.borrow().converts_to.keys(){
@@ -336,6 +373,23 @@ impl CubeDLL{
             }
             Ok(())
         }else{ unreachable!("Shouldn't be accessed. Should use point_to()") }
+    }
+    fn get_fusions(&self,name:&String)->CSResult<()>{
+        if self.hashmap.get(name).is_none(){
+            return Err(error::CSError::NonExistentName("CubeDLL::get_fusions",name.clone()))
+        }
+        for csl in self.hashmap.values(){
+            let cs=csl.borrow();
+            let mut do_print=false;
+            for key in cs.fused_by.keys(){
+                if key.contains_key(name){
+                    do_print=true;
+                    break
+                }
+            }
+            if do_print{ println!("{cs}"); }
+        }
+        Ok(())
     }
     fn get_info_cube_paths(&self){
         println!("Syntax: fused_by: [fuse key array (single/pair)] => [[this cube name]](tier) => converts_to: [cube name array]");
@@ -376,12 +430,12 @@ impl CubeDLL{
             println!("{cs_str}");
         }
     }
-    fn change_tier_at_p(&self,to_this_tier:i32)->Result<(),error::CSError>{
+    fn change_tier_at_p(&self,to_this_tier:i32)->CSResult<()>{
         let Some(csl_p)=&self.pointer else {return Err(error::CSError::NullPointer("CubeDLL::change_tier_at_p")) };
         csl_p.borrow_mut().tier=to_this_tier;
         Ok(())
     }
-    fn merge_keys_at_p(&self,cs_n1:String,cs_n2:String)->Result<(),error::CSError>{
+    fn merge_keys_at_p(&self,cs_n1:String,cs_n2:String)->CSResult<()>{
         let Some(csl_p)=&self.pointer else {return Err(error::CSError::NullPointer("CubeDLL::change_tier_at_p")) };
         let Some(csl1)=self.hashmap.get(&cs_n1) else{
             return Err(error::CSError::NonExistentName("CubeDLL::merge_keys_at_p",cs_n1.clone()))

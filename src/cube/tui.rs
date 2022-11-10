@@ -28,7 +28,7 @@ mod commands{
         cmd_hm.insert("unlink",TUI::unlink_cmd);
         cmd_hm.insert("unfuse",TUI::unlink_cmd);
         cmd_hm.insert("unlink_all",TUI::unlink_all_cmd);
-        cmd_hm.insert("unfuse_all",TUI::unlink_cmd);
+        cmd_hm.insert("unfuse_all",TUI::unlink_all_cmd);
         cmd_hm.insert("exit",TUI::exit_cmd);
         cmd_hm.insert("save_to",TUI::write_to_cmd);
         cmd_hm.insert("write_to",TUI::write_to_cmd);
@@ -37,6 +37,7 @@ mod commands{
         cmd_hm.insert("drop_all",TUI::rem_all_cmd);
         cmd_hm.insert("destroy_all",TUI::rem_all_cmd);
         cmd_hm.insert("change_tier",TUI::change_tier_cmd);
+        cmd_hm.insert("search_fusions",TUI::search_fusions_cmd);
         cmd_hm.insert("usage",TUI::usage_cmd);
         cmd_hm
     }
@@ -50,6 +51,7 @@ use super::error::CSError;
 use super::error::CSResult;
 ///Asserting characters are UTF-8 valid and can't be null
 fn check_valid_cube_name(arg:&str)->CSResult<()>{
+    if arg=="?"{ return Ok(()) }
     for b in arg.as_bytes(){
         match b{
             b if b.is_ascii_alphanumeric() => continue,
@@ -66,10 +68,11 @@ impl TUI{
     }
     fn add_cmd(&mut self,args:&[&str])->CSResult<()>{
         if args.len()%2==0{
-            return Err(CSError::InvalidArguments("get_commands_hashmap","<add ((cube_name) (Tier))+>"))
+            return Err(CSError::InvalidArguments("<add ((cube_name) (Tier))+>"))
         }
         for chunk in args[1..].chunks(2){
             check_valid_cube_name(chunk[0])?;
+            if chunk[0]=="?"{ return Err(CSError::InvalidArguments("? cannot be added other than using it for linking")) }
             let is_tier_num=chunk[1].parse::<i32>();
             match is_tier_num{
                 Ok(tier_num)=>{ self.cdll.add(CubeStruct::new(chunk[0].to_string(),tier_num))?; }
@@ -81,9 +84,10 @@ impl TUI{
     }
     fn rm_cmd(&mut self,args:&[&str])->CSResult<()>{
         if args.len()==1{
-            return Err(CSError::InvalidArguments("get_commands_hashmap","<remove|drop|destroy (cube_name)+>"))
+            return Err(CSError::InvalidArguments("<remove|drop|destroy (cube_name)+>"))
         }
         for cube_str in &args[1..]{
+            if cube_str==&"?"{ return Err(CSError::InvalidArguments("? cannot be destroyed. Use unlink command to remove ? links instead.")) }
             check_valid_cube_name(cube_str)?;
             self.cdll.point_to(cube_str.to_string())?;
             self.cdll.destroy_at_p()?;
@@ -93,7 +97,10 @@ impl TUI{
     }
     fn rename_cmd(&mut self,args:&[&str])->CSResult<()>{
         if args.len()!=4||args[2]!="to"{
-            return Err(CSError::InvalidArguments("get_commands_hashmap","<rename (cube) to (new_name)>"))
+            return Err(CSError::InvalidArguments("<rename (cube) to (new_name)>"))
+        }
+        if args[1]=="?"||args[3]=="?"{
+            return Err(CSError::InvalidArguments("? cannot be renamed or be used as a name"))
         }
         check_valid_cube_name(args[1])?;
         check_valid_cube_name(args[3])?;
@@ -104,7 +111,7 @@ impl TUI{
     }
     fn read_cmd(&mut self,args:&[&str])->CSResult<()>{
         if args.len()==1{
-            return Err(CSError::InvalidArguments("get_commands_hashmap","<read (cube_name)+>"))
+            return Err(CSError::InvalidArguments("<read (cube_name)+>"))
         }
         for arg in &args[1..]{
             check_valid_cube_name(arg)?;
@@ -119,19 +126,21 @@ impl TUI{
     }
     fn link_cmd(&mut self,args:&[&str])->CSResult<()>{
         let n@(4|5)=args.len() else{
-            return Err(CSError::InvalidArguments("get_commands_hashmap","<link|fuse (cube_name) with (cube_1) (cube_2)?>"))
+            return Err(CSError::InvalidArguments("<link|fuse (cube_name) with (cube_1) (cube_2)?>"))
         };
         if args[2]!="with"{
-            return Err(CSError::InvalidArguments("get_commands_hashmap","<link|fuse (cube_name) with (cube_1) (cube_2)?>"))
+            return Err(CSError::InvalidArguments("<link|fuse (cube_name) with (cube_1) (cube_2)?>"))
         }
         check_valid_cube_name(args[1])?;
         self.cdll.point_to(args[1].to_string())?;
         check_valid_cube_name(args[3])?;
+        if args[3]=="?"{ return Err(CSError::InvalidArguments("? cannot be used to fuse with another cube")) }
         if n==4{
             self.cdll.link_at_p_fb_single(args[3].to_string())?;
             println!("Successfully linked cube \"{}\" with \"{}\"",args[1],args[3]);
         }else{
             check_valid_cube_name(args[4])?;
+            if args[4]=="?"{ return Err(CSError::InvalidArguments("? cannot be used to fuse with another cube")) }
             self.cdll.link_at_p_fb_pair(args[3].to_string(),args[4].to_string())?;
             println!("Successfully linked cube \"{}\" with \"{}\" and \"{}\"",args[1],args[3],args[4]);
         }
@@ -139,10 +148,12 @@ impl TUI{
     }
     fn merge_cmd(&mut self,args:&[&str])->CSResult<()>{
         if args.len()!=5||args[3]!="in"{
-            return Err(CSError::InvalidArguments("get_commands_hashmap","<merge (cube_a) (cube_b) in (tui_cube)>"))
+            return Err(CSError::InvalidArguments("<merge (cube_a) (cube_b) in (tui_cube)>"))
         }
         check_valid_cube_name(args[1])?;
+        if args[1]=="?"{ return Err(CSError::InvalidArguments("? cannot be used to merge")) }
         check_valid_cube_name(args[2])?;
+        if args[2]=="?"{ return Err(CSError::InvalidArguments("? cannot be used to merge")) }
         check_valid_cube_name(args[4])?;
         self.cdll.point_to(args[4].to_string())?;
         self.cdll.merge_keys_at_p(args[1].to_string(),args[2].to_string())?;
@@ -151,37 +162,42 @@ impl TUI{
     }
     fn unlink_cmd(&mut self,args:&[&str])->CSResult<()>{
         let n@(4|5)=args.len() else{
-            return Err(CSError::InvalidArguments("get_commands_hashmap","<unlink|unfuse (cube_1) (cube_2)? in (cube_name)>"))
+            return Err(CSError::InvalidArguments("<unlink|unfuse (cube_1) (cube_2)? in (cube_name)>"))
         };
         if args[n-2]!="in"{
-            return Err(CSError::InvalidArguments("get_commands_hashmap","<unlink|unfuse (cube_1) (cube_2)? in (cube_name)>"))
+            return Err(CSError::InvalidArguments("<unlink|unfuse (cube_1) (cube_2)? in (cube_name)>"))
         }
         check_valid_cube_name(args[n-1])?;
         self.cdll.point_to(args[n-1].to_string())?;
         check_valid_cube_name(args[1])?;
-        if n==5 { check_valid_cube_name(args[2])?; }
+        if args[1]=="?"{ return Err(CSError::InvalidArguments("? cannot be unlinked with another cube")) }
+        if n==5 {
+            check_valid_cube_name(args[2])?;
+            if args[2]=="?"{ return Err(CSError::InvalidArguments("? cannot be unlinked with another cube")) }
+        }
         self.cdll.unlink_at_p_fb_keys(args[1].to_string(),if n==5{ Some(args[2].to_string()) }else{ None })?;
         println!("Successfully removed for cube \"{}\"",args[n-1]);
         Ok(())
     }
     fn unlink_all_cmd(&mut self,args:&[&str])->CSResult<()>{
         if args.len()==1{
-            return Err(CSError::InvalidArguments("get_commands_hashmap","<unlink_all|unfuse_all (cube_name)+>"))
+            return Err(CSError::InvalidArguments("<unlink_all|unfuse_all (cube_name)+>"))
         }
         for arg in &args[1..]{
             check_valid_cube_name(arg)?;
             self.cdll.point_to(arg.to_string())?;
             self.cdll.unlink_at_p_fb()?;
-            println!("Successfully unlinked cube \"{arg}\" from fused_by properties.");
+            println!("Successfully unlinked cube \"{arg}\"'s fused_by properties.");
         }
         Ok(())
     }
     fn change_tier_cmd(&mut self,args:&[&str])->CSResult<()>{
         if args.len()!=3{
-            return Err(CSError::InvalidArguments("get_commands_hashmap","<change_tier (cube_name) (this_tier)>"))
+            return Err(CSError::InvalidArguments("<change_tier (cube_name) (this_tier)>"))
         }
         check_valid_cube_name(args[1])?;
         self.cdll.point_to(args[1].to_string())?;
+        if args[1]=="?"{ return Err(CSError::InvalidArguments("? does not have a tier")) }
         let tier={ match args[2].parse::<i32>(){ Ok(tier)=>{ tier } Err(e)=> return ErrToCSErr!(e) } };
         self.cdll.change_tier_at_p(tier)?;
         println!("Tier changed to {tier} for cube \"{}\"",args[1]);
@@ -192,6 +208,15 @@ impl TUI{
             self.cdll.remove_all_cubes();
             println!("All cubes in the program have been removed.");
         }
+        Ok(())
+    }
+    fn search_fusions_cmd(&mut self,args:&[&str])->CSResult<()>{
+        if args.len()!=2{
+            return Err(CSError::InvalidArguments("<search_fusions (cube)>"))
+        }
+        check_valid_cube_name(args[1])?;
+        println!("Printing cubes that have {} as its cube fusion:",args[1]);
+        self.cdll.get_fusions(&args[1].to_string())?;
         Ok(())
     }
     fn yn_loop(&self,msg:String)->Result<bool,CSError>{
@@ -208,7 +233,7 @@ impl TUI{
     }
     fn write_to_cmd(&mut self,args:&[&str])->CSResult<()>{
         if args.len()!=2{
-            return Err(CSError::InvalidArguments("get_commands_hashmap","<save_to (file_name)>"))
+            return Err(CSError::InvalidArguments("<save_to (file_name)>"))
         }
         use std::fs::File;
         use std::io::Write;
@@ -225,7 +250,7 @@ impl TUI{
     }
     fn load_from_cmd(&mut self,args:&[&str])->CSResult<()>{
         if args.len()!=2{
-            return Err(CSError::InvalidArguments("get_commands_hashmap","<load_from (file_name)>"))
+            return Err(CSError::InvalidArguments("<load_from (file_name)>"))
         }
         use std::fs::File;
         use std::io::BufReader;
@@ -294,7 +319,7 @@ impl TUI{
             Commands: <add ((cube_name) (Tier))+>,<remove|drop|destroy (cube_name)+>,<rename (cube_name) to (new_cube_name)>,<read (cube_name)+>,\n\
             <read_all>,<link|fuse (cube_name) with (cube_1) (cube_2)?>,\n\
             <merge (cube_a) (cube_b) in (this_cube)><unlink_all|unfuse_all (cube_name)+>,<unlink|unfuse (cube_1) (cube_2)? in (cube_name)>,\n\
-            <remove_all|drop_all|destroy_all>,<change_tier (cube_name) (this_tier)>\n\
+            <remove_all|drop_all|destroy_all>,<change_tier (cube_name) (this_tier)>,<search_fusions (cube)>\n\
             <save_to|write_to (file_name)>,<load_from (file_name)>,<exit>");
         Ok(())
     }
