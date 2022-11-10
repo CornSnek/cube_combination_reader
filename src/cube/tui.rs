@@ -276,7 +276,7 @@ impl TUI{
         check_valid_cube_name(args[1])?;
         println!("Finding cube names starting with {}",args[1]);
         print!("{}",self.cdll.hashmap.keys().filter(|&k|k.starts_with(args[1])).enumerate().fold(String::new(),
-            |res,t|res+t.0.to_string().as_str()+": "+t.1+"\n"
+            |res,t|res+(t.0+1).to_string().as_str()+": "+t.1+"\n"
         ));
         return_if_error!(std::io::Write::flush(&mut std::io::stdout()));
         Ok(())
