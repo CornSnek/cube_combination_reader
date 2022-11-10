@@ -480,19 +480,19 @@ impl CubeDLL{
         let Some(csl_p)=&self.pointer else {return Err(error::CSError::NullPointer("CubeDLL::change_tier_at_p")) };
         let cs_str=csl_p.borrow().name.clone();
         println!("Getting Combinations to get {}",cs_str);
-        let mut build_str:Vec<String>=Vec::new();
+        let mut build_str:Vec<(usize,String)>=Vec::new();
         self.build_tree_recurse(cs_str,&mut hm_visited,1,&mut build_str);
         build_str.sort_unstable(); //Print sorted by build_tier.
-        println!("{}",build_str.concat());
+        println!("{}",build_str.into_iter().map(|i|i.1).collect::<Box<_>>().concat());
         Ok(())
     }
     ///Recursion over CubeStruct Links to get Cube Combinations for a single Cube. Asserting that the visit_str exists.
-    fn build_tree_recurse(&self,visit_str:String,hm_visited:&mut HashSet<String>,build_tier:usize,build_str:&mut Vec<String>){
+    fn build_tree_recurse(&self,visit_str:String,hm_visited:&mut HashSet<String>,build_tier:usize,build_str:&mut Vec<(usize,String)>){
         if hm_visited.get(&visit_str).is_none(){
             hm_visited.insert(visit_str.clone());
             let cs=self.hashmap.get(&visit_str).unwrap().borrow();
             for fuse_key in cs.fused_by.keys(){
-                build_str.push(format!("{build_tier}: {visit_str} made with {fuse_key}\n"));
+                build_str.push((build_tier,format!("{build_tier}: {visit_str} made with {fuse_key}\n")));
                 match fuse_key{
                     FuseKey::Pair(s0,s1)=>{
                         self.build_tree_recurse(s0.to_string(),hm_visited,build_tier+1,build_str);
