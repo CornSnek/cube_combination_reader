@@ -9,7 +9,7 @@ macro_rules! SWF{
 mod tui;
 pub mod error;
 pub use tui::TUI;
-use std::{rc::Rc, cell::RefCell, collections::HashMap, fmt::{Display, Formatter}, hash::Hash};
+use std::{rc::Rc, cell::RefCell, collections::{HashMap, HashSet}, fmt::{Display, Formatter}, hash::Hash};
 type Link=Rc<RefCell<CubeStruct>>;
 struct CubeStruct{
     name:String,
@@ -45,7 +45,7 @@ impl Display for FuseKey{
     fn fmt(&self, f: &mut Formatter<'_>)->Result<(),std::fmt::Error> {
         match self{
             Self::Single(s)=>write!(f,"({s}?)"),
-            Self::Pair(s1,s2)=>write!(f,"({s1},{s2})")
+            Self::Pair(s1,s2)=>write!(f,"({s1}|{s2})")
         }
     }
 }
@@ -457,6 +457,51 @@ impl CubeDLL{
             _=>{
                 csl_p.borrow_mut().merge_single_keys(csl1,csl2);
                 Ok(())
+            }
+        }
+    }
+    fn get_fusions_at_p(&self)->CSResult<()>{
+        let Some(csl_p)=&self.pointer else {return Err(error::CSError::NullPointer("CubeDLL::change_tier_at_p")) };
+        let str_cs=&csl_p.borrow().name;
+        let mut count:usize=1;
+        for csl_other in self.hashmap.values(){
+            let csl_other_str=&csl_other.borrow().name;
+            for fuse_key in csl_other.borrow().fused_by.keys(){
+                if fuse_key.contains_key(str_cs){
+                    println!("{count}: {csl_other_str} made with {fuse_key}");
+                    count+=1;
+                }
+            }
+        }
+        Ok(())
+    }
+    fn build_tree_at_p(&self)->CSResult<()>{
+        let mut hm_visited:HashSet<String>=HashSet::new();
+        let Some(csl_p)=&self.pointer else {return Err(error::CSError::NullPointer("CubeDLL::change_tier_at_p")) };
+        let cs_str=csl_p.borrow().name.clone();
+        println!("Getting Combinations to get {}",cs_str);
+        let mut build_str:Vec<String>=Vec::new();
+        self.build_tree_recurse(cs_str,&mut hm_visited,1,&mut build_str);
+        build_str.sort_unstable(); //Print sorted by build_tier.
+        println!("{}",build_str.concat());
+        Ok(())
+    }
+    ///Recursion over CubeStruct Links to get Cube Combinations for a single Cube. Asserting that the visit_str exists.
+    fn build_tree_recurse(&self,visit_str:String,hm_visited:&mut HashSet<String>,build_tier:usize,build_str:&mut Vec<String>){
+        if hm_visited.get(&visit_str).is_none(){
+            hm_visited.insert(visit_str.clone());
+            let cs=self.hashmap.get(&visit_str).unwrap().borrow();
+            for fuse_key in cs.fused_by.keys(){
+                build_str.push(format!("{build_tier}: {visit_str} made with {fuse_key}\n"));
+                match fuse_key{
+                    FuseKey::Pair(s0,s1)=>{
+                        self.build_tree_recurse(s0.to_string(),hm_visited,build_tier+1,build_str);
+                        self.build_tree_recurse(s1.to_string(),hm_visited,build_tier+1,build_str);
+                    }
+                    FuseKey::Single(s)=>{
+                        self.build_tree_recurse(s.to_string(),hm_visited,build_tier+1,build_str);
+                    }
+                }
             }
         }
     }

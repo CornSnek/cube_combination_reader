@@ -37,6 +37,8 @@ mod commands{
         cmd_hm.insert("drop_all",TUI::rem_all_cmd);
         cmd_hm.insert("destroy_all",TUI::rem_all_cmd);
         cmd_hm.insert("change_tier",TUI::change_tier_cmd);
+        cmd_hm.insert("get_fusions",TUI::get_fusions_cmd);
+        cmd_hm.insert("build_tree",TUI::build_tree_cmd);
         cmd_hm.insert("usage",TUI::usage_cmd);
         cmd_hm
     }
@@ -209,6 +211,24 @@ impl TUI{
         }
         Ok(())
     }
+    fn get_fusions_cmd(&mut self,args:&[&str])->CSResult<()>{
+        if args.len()!=2{
+            return Err(CSError::InvalidArguments("<get_fusions (cube_name)>"))
+        }
+        check_valid_cube_name(args[1])?;
+        self.cdll.point_to(args[1].to_string())?;
+        self.cdll.get_fusions_at_p()?;
+        Ok(())
+    }
+    fn build_tree_cmd(&mut self,args:&[&str])->CSResult<()>{
+        if args.len()!=2{
+            return Err(CSError::InvalidArguments("<build_tree (cube_name)>"))
+        }
+        check_valid_cube_name(args[1])?;
+        self.cdll.point_to(args[1].to_string())?;
+        self.cdll.build_tree_at_p()?;
+        Ok(())
+    }
     fn yn_loop(&self,msg:String)->Result<bool,CSError>{
         use std::io::Write;
         loop{
@@ -309,7 +329,7 @@ impl TUI{
             Commands: <add ((cube_name) (Tier))+>,<remove|drop|destroy (cube_name)+>,<rename (cube_name) to (new_cube_name)>,<read (cube_name)+>,\n\
             <read_all>,<link|fuse (cube_name) with (cube_1) (cube_2)?>,\n\
             <merge (cube_a) (cube_b) in (this_cube)><unlink_all|unfuse_all (cube_name)+>,<unlink|unfuse (cube_1) (cube_2)? in (cube_name)>,\n\
-            <remove_all|drop_all|destroy_all>,<change_tier (cube_name) (this_tier)>,<search_fusions (cube)>\n\
+            <remove_all|drop_all|destroy_all>,<change_tier (cube_name) (this_tier)>,<get_fusions (cube)>,<build_tree (cube)>\n\
             <save_to|write_to (file_name)>,<load_from (file_name)>,<exit>");
         Ok(())
     }
