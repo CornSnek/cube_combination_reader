@@ -8,8 +8,8 @@ macro_rules! return_if_error{
 pub struct TUI{
     cdll:super::CubeDLL,
     done_program:bool,
+    hm_command:commands::CommandHashMap<'static>,
     usage_str:String,
-    hm_command:commands::CommandHashMap<'static>    
 }
 mod commands{
     use super::{TUI,super::error::CSResult};
@@ -17,31 +17,31 @@ mod commands{
     pub type Commands<'a>=fn(&mut TUI, &[&str], &'a str)->CSResult<()>;
     pub fn get_commands_hashmap()->CommandHashMap<'static>{
         let mut cmd_hm=CommandHashMap::new();
-        cmd_hm.insert("add",(TUI::add_cmd,"<add ((cube_name) (Tier))+>\n"));
-        cmd_hm.insert("remove",(TUI::rm_cmd,"<destroy|drop|remove (cube_name)+>\n"));
-        cmd_hm.insert("drop",(TUI::rm_cmd,"<destroy|drop|remove (cube_name)+>\n"));
-        cmd_hm.insert("destroy",(TUI::rm_cmd,"<destroy|drop|remove (cube_name)+>\n"));
-        cmd_hm.insert("rename",(TUI::rename_cmd,"<rename (cube) to (new_name)>\n"));
-        cmd_hm.insert("read",(TUI::read_cmd,"<read (cube_name)+>\n"));
-        cmd_hm.insert("read_all",(TUI::read_all_cmd,"<read_all>\n"));
-        cmd_hm.insert("link",(TUI::link_cmd,"<fuse|link (cube_name) with (cube_1) (cube_2)?>\n")); 
-        cmd_hm.insert("fuse",(TUI::link_cmd,"<fuse|link (cube_name) with (cube_1) (cube_2)?>\n"));
-        cmd_hm.insert("merge",(TUI::merge_cmd,"<merge (cube_a) (cube_b) in (tui_cube)>\n"));
-        cmd_hm.insert("unlink",(TUI::unlink_cmd,"<unfuse|unlink (cube_1) (cube_2)? in (cube_name)>\n"));
-        cmd_hm.insert("unfuse",(TUI::unlink_cmd,"<unfuse|unlink (cube_1) (cube_2)? in (cube_name)>\n"));
-        cmd_hm.insert("unlink_all",(TUI::unlink_all_cmd,"<unfuse_all|unlink_all (cube_name)+>\n"));
-        cmd_hm.insert("unfuse_all",(TUI::unlink_all_cmd,"<unfuse_all|unlink_all (cube_name)+>\n"));
-        cmd_hm.insert("exit",(TUI::exit_cmd,"<exit>\n"));
-        cmd_hm.insert("save_to",(TUI::save_to_cmd,"<save_to (file_name)>\n"));
-        cmd_hm.insert("write_to",(TUI::save_to_cmd,"<save_to (file_name)>\n"));
-        cmd_hm.insert("load_from",(TUI::load_from_cmd,"<load_from (file_name)>\n"));
-        cmd_hm.insert("remove_all",(TUI::rem_all_cmd,"<destroy_all|drop_all|remove_all>\n"));
-        cmd_hm.insert("drop_all",(TUI::rem_all_cmd,"<destroy_all|drop_all|remove_all>\n"));
-        cmd_hm.insert("destroy_all",(TUI::rem_all_cmd,"<destroy_all|drop_all|remove_all>\n"));
-        cmd_hm.insert("change_tier",(TUI::change_tier_cmd,"<change_tier (cube_name) (this_tier)>\n"));
-        cmd_hm.insert("get_fusions",(TUI::get_fusions_cmd,"<get_fusions (cube_name)>\n"));
-        cmd_hm.insert("build_tree",(TUI::build_tree_cmd,"<build_tree (cube_name)>\n"));
-        cmd_hm.insert("usage",(TUI::usage_cmd,"<usage>\n"));
+        cmd_hm.insert("add",(TUI::add_cmd,"<add ((cube_name) (Tier))+>"));
+        cmd_hm.insert("remove",(TUI::rm_cmd,"<destroy|drop|remove (cube_name)+>"));
+        cmd_hm.insert("drop",(TUI::rm_cmd,"<destroy|drop|remove (cube_name)+>"));
+        cmd_hm.insert("destroy",(TUI::rm_cmd,"<destroy|drop|remove (cube_name)+>"));
+        cmd_hm.insert("rename",(TUI::rename_cmd,"<rename (cube) to (new_name)>"));
+        cmd_hm.insert("read",(TUI::read_cmd,"<read (cube_name)+>"));
+        cmd_hm.insert("read_all",(TUI::read_all_cmd,"<read_all>"));
+        cmd_hm.insert("link",(TUI::link_cmd,"<fuse|link (cube_name) with (cube_1) (cube_2)?>")); 
+        cmd_hm.insert("fuse",(TUI::link_cmd,"<fuse|link (cube_name) with (cube_1) (cube_2)?>"));
+        cmd_hm.insert("merge",(TUI::merge_cmd,"<merge (cube_a) (cube_b) in (tui_cube)>"));
+        cmd_hm.insert("unlink",(TUI::unlink_cmd,"<unfuse|unlink (cube_1) (cube_2)? in (cube_name)>"));
+        cmd_hm.insert("unfuse",(TUI::unlink_cmd,"<unfuse|unlink (cube_1) (cube_2)? in (cube_name)>"));
+        cmd_hm.insert("unlink_all",(TUI::unlink_all_cmd,"<unfuse_all|unlink_all (cube_name)+>"));
+        cmd_hm.insert("unfuse_all",(TUI::unlink_all_cmd,"<unfuse_all|unlink_all (cube_name)+>"));
+        cmd_hm.insert("exit",(TUI::exit_cmd,"<exit>"));
+        cmd_hm.insert("save_to",(TUI::save_to_cmd,"<save_to (file_name)>"));
+        cmd_hm.insert("write_to",(TUI::save_to_cmd,"<save_to (file_name)>"));
+        cmd_hm.insert("load_from",(TUI::load_from_cmd,"<load_from (file_name)>"));
+        cmd_hm.insert("remove_all",(TUI::rem_all_cmd,"<destroy_all|drop_all|remove_all>"));
+        cmd_hm.insert("drop_all",(TUI::rem_all_cmd,"<destroy_all|drop_all|remove_all>"));
+        cmd_hm.insert("destroy_all",(TUI::rem_all_cmd,"<destroy_all|drop_all|remove_all>"));
+        cmd_hm.insert("change_tier",(TUI::change_tier_cmd,"<change_tier (cube_name) (this_tier)>"));
+        cmd_hm.insert("get_fusions",(TUI::get_fusions_cmd,"<get_fusions (cube_name)>"));
+        cmd_hm.insert("build_tree",(TUI::build_tree_cmd,"<build_tree (cube_name)>"));
+        cmd_hm.insert("usage",(TUI::usage_cmd,"<usage>"));
         cmd_hm
     }
 }
@@ -71,7 +71,11 @@ impl TUI{
         let hm_command=commands::get_commands_hashmap();
         let mut usage_str_box=hm_command.values().map(|i|i.1.to_string()).collect::<Box<_>>();
         usage_str_box.sort_unstable();
-        Self{cdll:Default::default(),done_program:false,usage_str:usage_str_box.concat(),hm_command}
+        Self{cdll:Default::default(),
+            done_program:false,
+            hm_command,
+            usage_str:usage_str_box.iter().flat_map(|s| s.chars().chain("\n".chars())).collect::<String>()
+        }//usage_str_box.concat(), but adds "\n" near the end of each string
     }
     pub fn program_loop(&mut self){
         let mut rl=Editor::<()>::new().expect("Unable to setup program loop.");
@@ -99,7 +103,7 @@ impl TUI{
         if rl.save_history("cmd_history.txt").is_err(){ do_print_error!("Couldn't save commands."); }
     }
     fn add_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
-        if args.len()%2==0{
+        if args.len()%2==0||args.len()==1{
             return Err(CSError::InvalidArguments(usage))
         }
         for chunk in args[1..].chunks(2){
