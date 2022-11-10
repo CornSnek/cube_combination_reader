@@ -5,6 +5,7 @@ macro_rules! SWF{
     (T)=>{"t:"};
     (FB)=>{"fb:"};
     (CT)=>{"ct:"};
+    (Temp)=>{"temp.sav"};
 }
 mod tui;
 pub mod error;

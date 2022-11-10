@@ -105,6 +105,10 @@ impl TUI{
             }
         }
         if rl.save_history("cmd_history.txt").is_err(){ do_print_error!("Couldn't save commands."); }
+        println!(concat!("Exiting program. Saving any unsaved data to ",SWF!(Temp)));
+        if let Err(e)=self.save_temp(){
+            do_print_error!("Error has occured: {e:?}: {e}");
+        }
     }
     fn add_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
         if args.len()%2==0||args.len()==1{
@@ -323,6 +327,17 @@ impl TUI{
             return Ok(())
         };
         let mut to_file={ match File::create(args[1]){ Ok(file)=>file, Err(e)=>return ErrToCSErr!(e) } };
+        let mut sorted:Box<_>=self.cdll.hashmap.iter().collect();
+        sorted.sort_by(|kv1,kv2| kv1.0.cmp(kv2.0));
+        for (_,csl) in sorted.iter(){
+            return_if_error!{writeln!(to_file,"{}",csl.borrow().save_write_str())}
+        }
+        Ok(())
+    }
+    fn save_temp(&mut self)->CSResult<()>{
+        use std::fs::File;
+        use std::io::Write;
+        let mut to_file={ match File::create(SWF!(Temp)){ Ok(file)=>file, Err(e)=>return ErrToCSErr!(e) } };
         let mut sorted:Box<_>=self.cdll.hashmap.iter().collect();
         sorted.sort_by(|kv1,kv2| kv1.0.cmp(kv2.0));
         for (_,csl) in sorted.iter(){
