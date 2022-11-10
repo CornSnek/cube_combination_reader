@@ -7,39 +7,41 @@ macro_rules! return_if_error{
 }
 pub struct TUI{
     cdll:super::CubeDLL,
-    done_program:bool    
+    done_program:bool,
+    usage_str:String,
+    hm_command:commands::CommandHashMap<'static>    
 }
 mod commands{
     use super::{TUI,super::error::CSResult};
-    type CommandHashMap<'a>=std::collections::HashMap<&'a str,Commands>;
-    pub type Commands=fn(&mut TUI, &[&str])->CSResult<()>;
+    pub type CommandHashMap<'a>=std::collections::HashMap<&'a str,(Commands<'a>,&'a str)>;
+    pub type Commands<'a>=fn(&mut TUI, &[&str], &'a str)->CSResult<()>;
     pub fn get_commands_hashmap()->CommandHashMap<'static>{
         let mut cmd_hm=CommandHashMap::new();
-        cmd_hm.insert("add",TUI::add_cmd);
-        cmd_hm.insert("remove",TUI::rm_cmd);
-        cmd_hm.insert("drop",TUI::rm_cmd);
-        cmd_hm.insert("destroy",TUI::rm_cmd);
-        cmd_hm.insert("rename",TUI::rename_cmd);
-        cmd_hm.insert("read",TUI::read_cmd);
-        cmd_hm.insert("read_all",TUI::read_all_cmd);
-        cmd_hm.insert("link",TUI::link_cmd); 
-        cmd_hm.insert("fuse",TUI::link_cmd);
-        cmd_hm.insert("merge",TUI::merge_cmd);
-        cmd_hm.insert("unlink",TUI::unlink_cmd);
-        cmd_hm.insert("unfuse",TUI::unlink_cmd);
-        cmd_hm.insert("unlink_all",TUI::unlink_all_cmd);
-        cmd_hm.insert("unfuse_all",TUI::unlink_all_cmd);
-        cmd_hm.insert("exit",TUI::exit_cmd);
-        cmd_hm.insert("save_to",TUI::write_to_cmd);
-        cmd_hm.insert("write_to",TUI::write_to_cmd);
-        cmd_hm.insert("load_from",TUI::load_from_cmd);
-        cmd_hm.insert("remove_all",TUI::rem_all_cmd);
-        cmd_hm.insert("drop_all",TUI::rem_all_cmd);
-        cmd_hm.insert("destroy_all",TUI::rem_all_cmd);
-        cmd_hm.insert("change_tier",TUI::change_tier_cmd);
-        cmd_hm.insert("get_fusions",TUI::get_fusions_cmd);
-        cmd_hm.insert("build_tree",TUI::build_tree_cmd);
-        cmd_hm.insert("usage",TUI::usage_cmd);
+        cmd_hm.insert("add",(TUI::add_cmd,"<add ((cube_name) (Tier))+>\n"));
+        cmd_hm.insert("remove",(TUI::rm_cmd,"<destroy|drop|remove (cube_name)+>\n"));
+        cmd_hm.insert("drop",(TUI::rm_cmd,"<destroy|drop|remove (cube_name)+>\n"));
+        cmd_hm.insert("destroy",(TUI::rm_cmd,"<destroy|drop|remove (cube_name)+>\n"));
+        cmd_hm.insert("rename",(TUI::rename_cmd,"<rename (cube) to (new_name)>\n"));
+        cmd_hm.insert("read",(TUI::read_cmd,"<read (cube_name)+>\n"));
+        cmd_hm.insert("read_all",(TUI::read_all_cmd,"<read_all>\n"));
+        cmd_hm.insert("link",(TUI::link_cmd,"<fuse|link (cube_name) with (cube_1) (cube_2)?>\n")); 
+        cmd_hm.insert("fuse",(TUI::link_cmd,"<fuse|link (cube_name) with (cube_1) (cube_2)?>\n"));
+        cmd_hm.insert("merge",(TUI::merge_cmd,"<merge (cube_a) (cube_b) in (tui_cube)>\n"));
+        cmd_hm.insert("unlink",(TUI::unlink_cmd,"<unfuse|unlink (cube_1) (cube_2)? in (cube_name)>\n"));
+        cmd_hm.insert("unfuse",(TUI::unlink_cmd,"<unfuse|unlink (cube_1) (cube_2)? in (cube_name)>\n"));
+        cmd_hm.insert("unlink_all",(TUI::unlink_all_cmd,"<unfuse_all|unlink_all (cube_name)+>\n"));
+        cmd_hm.insert("unfuse_all",(TUI::unlink_all_cmd,"<unfuse_all|unlink_all (cube_name)+>\n"));
+        cmd_hm.insert("exit",(TUI::exit_cmd,"<exit>\n"));
+        cmd_hm.insert("save_to",(TUI::save_to_cmd,"<save_to (file_name)>\n"));
+        cmd_hm.insert("write_to",(TUI::save_to_cmd,"<save_to (file_name)>\n"));
+        cmd_hm.insert("load_from",(TUI::load_from_cmd,"<load_from (file_name)>\n"));
+        cmd_hm.insert("remove_all",(TUI::rem_all_cmd,"<destroy_all|drop_all|remove_all>\n"));
+        cmd_hm.insert("drop_all",(TUI::rem_all_cmd,"<destroy_all|drop_all|remove_all>\n"));
+        cmd_hm.insert("destroy_all",(TUI::rem_all_cmd,"<destroy_all|drop_all|remove_all>\n"));
+        cmd_hm.insert("change_tier",(TUI::change_tier_cmd,"<change_tier (cube_name) (this_tier)>\n"));
+        cmd_hm.insert("get_fusions",(TUI::get_fusions_cmd,"<get_fusions (cube_name)>\n"));
+        cmd_hm.insert("build_tree",(TUI::build_tree_cmd,"<build_tree (cube_name)>\n"));
+        cmd_hm.insert("usage",(TUI::usage_cmd,"<usage>\n"));
         cmd_hm
     }
 }
@@ -66,10 +68,12 @@ fn check_valid_cube_name(arg:&str)->CSResult<()>{
 ///All functions ending in _cmd is for a hashmap.
 impl TUI{
     pub fn new()->Self{
-        Self{cdll:Default::default(),done_program:false}
+        let hm_command=commands::get_commands_hashmap();
+        let mut usage_str_box=hm_command.values().map(|i|i.1.to_string()).collect::<Box<_>>();
+        usage_str_box.sort_unstable();
+        Self{cdll:Default::default(),done_program:false,usage_str:usage_str_box.concat(),hm_command}
     }
     pub fn program_loop(&mut self){
-        let commands_hm=commands::get_commands_hashmap();
         let mut rl=Editor::<()>::new().expect("Unable to setup program loop.");
         if rl.load_history("cmd_history.txt").is_err(){ println!("Commands not saved yet.") }
         while !self.done_program{
@@ -80,7 +84,9 @@ impl TUI{
                 Ok(line)=>{
                     rl.add_history_entry(line.as_str());
                     let args:Box<_>=line.split_whitespace().collect();
-                    if let Err(e)=commands_hm.get(args[0]).unwrap_or(&(Self::not_found_cmd as commands::Commands))(self,&args){
+                    let default_cmd=&(Self::not_found_cmd as commands::Commands,"");
+                    let command_unwrap_tup=self.hm_command.get(args[0]).unwrap_or(default_cmd);
+                    if let Err(e)=command_unwrap_tup.0(self,&args,command_unwrap_tup.1){
                         do_print_error!("Error has occured: {e:?}: {e}");
                     }
                 },
@@ -92,9 +98,9 @@ impl TUI{
         }
         if rl.save_history("cmd_history.txt").is_err(){ do_print_error!("Couldn't save commands."); }
     }
-    fn add_cmd(&mut self,args:&[&str])->CSResult<()>{
+    fn add_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
         if args.len()%2==0{
-            return Err(CSError::InvalidArguments("<add ((cube_name) (Tier))+>"))
+            return Err(CSError::InvalidArguments(usage))
         }
         for chunk in args[1..].chunks(2){
             check_valid_cube_name(chunk[0])?;
@@ -108,9 +114,9 @@ impl TUI{
         }
         Ok(())
     }
-    fn rm_cmd(&mut self,args:&[&str])->CSResult<()>{
+    fn rm_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
         if args.len()==1{
-            return Err(CSError::InvalidArguments("<remove|drop|destroy (cube_name)+>"))
+            return Err(CSError::InvalidArguments(usage))
         }
         for cube_str in &args[1..]{
             if cube_str==&"?"{ return Err(CSError::InvalidArguments("? cannot be destroyed. Use unlink command to remove ? links instead.")) }
@@ -121,9 +127,9 @@ impl TUI{
         }
         Ok(())
     }
-    fn rename_cmd(&mut self,args:&[&str])->CSResult<()>{
+    fn rename_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
         if args.len()!=4||args[2]!="to"{
-            return Err(CSError::InvalidArguments("<rename (cube) to (new_name)>"))
+            return Err(CSError::InvalidArguments(usage))
         }
         if args[1]=="?"||args[3]=="?"{
             return Err(CSError::InvalidArguments("? cannot be renamed or be used as a name"))
@@ -135,9 +141,9 @@ impl TUI{
         println!("Cube \"{}\" successfully renamed to \"{}\"",args[1],args[3]);
         Ok(())
     }
-    fn read_cmd(&mut self,args:&[&str])->CSResult<()>{
+    fn read_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
         if args.len()==1{
-            return Err(CSError::InvalidArguments("<read (cube_name)+>"))
+            return Err(CSError::InvalidArguments(usage))
         }
         for arg in &args[1..]{
             check_valid_cube_name(arg)?;
@@ -146,16 +152,16 @@ impl TUI{
         }
         Ok(())
     }
-    fn read_all_cmd(&mut self,_:&[&str])->CSResult<()>{
+    fn read_all_cmd(&mut self,_:&[&str],_:&'static str)->CSResult<()>{
         self.cdll.get_info_cube_paths();
         Ok(())
     }
-    fn link_cmd(&mut self,args:&[&str])->CSResult<()>{
+    fn link_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
         let n@(4|5)=args.len() else{
-            return Err(CSError::InvalidArguments("<link|fuse (cube_name) with (cube_1) (cube_2)?>"))
+            return Err(CSError::InvalidArguments(usage))
         };
         if args[2]!="with"{
-            return Err(CSError::InvalidArguments("<link|fuse (cube_name) with (cube_1) (cube_2)?>"))
+            return Err(CSError::InvalidArguments(usage))
         }
         check_valid_cube_name(args[1])?;
         self.cdll.point_to(args[1].to_string())?;
@@ -172,9 +178,9 @@ impl TUI{
         }
         Ok(())
     }
-    fn merge_cmd(&mut self,args:&[&str])->CSResult<()>{
+    fn merge_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
         if args.len()!=5||args[3]!="in"{
-            return Err(CSError::InvalidArguments("<merge (cube_a) (cube_b) in (tui_cube)>"))
+            return Err(CSError::InvalidArguments(usage))
         }
         check_valid_cube_name(args[1])?;
         if args[1]=="?"{ return Err(CSError::InvalidArguments("? cannot be used to merge")) }
@@ -186,12 +192,12 @@ impl TUI{
         println!("Successfully merged keys \"{}\" with \"{}\" for \"{}\"",args[1],args[2],args[4]);
         Ok(())
     }
-    fn unlink_cmd(&mut self,args:&[&str])->CSResult<()>{
+    fn unlink_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
         let n@(4|5)=args.len() else{
-            return Err(CSError::InvalidArguments("<unlink|unfuse (cube_1) (cube_2)? in (cube_name)>"))
+            return Err(CSError::InvalidArguments(usage))
         };
         if args[n-2]!="in"{
-            return Err(CSError::InvalidArguments("<unlink|unfuse (cube_1) (cube_2)? in (cube_name)>"))
+            return Err(CSError::InvalidArguments(usage))
         }
         check_valid_cube_name(args[n-1])?;
         self.cdll.point_to(args[n-1].to_string())?;
@@ -205,9 +211,9 @@ impl TUI{
         println!("Successfully removed for cube \"{}\"",args[n-1]);
         Ok(())
     }
-    fn unlink_all_cmd(&mut self,args:&[&str])->CSResult<()>{
+    fn unlink_all_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
         if args.len()==1{
-            return Err(CSError::InvalidArguments("<unlink_all|unfuse_all (cube_name)+>"))
+            return Err(CSError::InvalidArguments(usage))
         }
         for arg in &args[1..]{
             check_valid_cube_name(arg)?;
@@ -217,9 +223,9 @@ impl TUI{
         }
         Ok(())
     }
-    fn change_tier_cmd(&mut self,args:&[&str])->CSResult<()>{
+    fn change_tier_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
         if args.len()!=3{
-            return Err(CSError::InvalidArguments("<change_tier (cube_name) (this_tier)>"))
+            return Err(CSError::InvalidArguments(usage))
         }
         check_valid_cube_name(args[1])?;
         self.cdll.point_to(args[1].to_string())?;
@@ -229,25 +235,25 @@ impl TUI{
         println!("Tier changed to {tier} for cube \"{}\"",args[1]);
         Ok(())
     }
-    fn rem_all_cmd(&mut self,_:&[&str])->CSResult<()>{
+    fn rem_all_cmd(&mut self,_:&[&str],_:&'static str)->CSResult<()>{
         if self.yn_loop(format!("All cube data will be erased without saving."))?{
             self.cdll.remove_all_cubes();
             println!("All cubes in the program have been removed.");
         }
         Ok(())
     }
-    fn get_fusions_cmd(&mut self,args:&[&str])->CSResult<()>{
+    fn get_fusions_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
         if args.len()!=2{
-            return Err(CSError::InvalidArguments("<get_fusions (cube_name)>"))
+            return Err(CSError::InvalidArguments(usage))
         }
         check_valid_cube_name(args[1])?;
         self.cdll.point_to(args[1].to_string())?;
         self.cdll.get_fusions_at_p()?;
         Ok(())
     }
-    fn build_tree_cmd(&mut self,args:&[&str])->CSResult<()>{
+    fn build_tree_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
         if args.len()!=2{
-            return Err(CSError::InvalidArguments("<build_tree (cube_name)>"))
+            return Err(CSError::InvalidArguments(usage))
         }
         check_valid_cube_name(args[1])?;
         self.cdll.point_to(args[1].to_string())?;
@@ -266,9 +272,9 @@ impl TUI{
             if args[0]=="y"{ return Ok(true) }else if args[0]=="n"{ return Ok(false) }
         }
     }
-    fn write_to_cmd(&mut self,args:&[&str])->CSResult<()>{
+    fn save_to_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
         if args.len()!=2{
-            return Err(CSError::InvalidArguments("<save_to (file_name)>"))
+            return Err(CSError::InvalidArguments(usage))
         }
         use std::fs::File;
         use std::io::Write;
@@ -283,9 +289,9 @@ impl TUI{
         }
         Ok(())
     }
-    fn load_from_cmd(&mut self,args:&[&str])->CSResult<()>{
+    fn load_from_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
         if args.len()!=2{
-            return Err(CSError::InvalidArguments("<load_from (file_name)>"))
+            return Err(CSError::InvalidArguments(usage))
         }
         use std::fs::File;
         use std::io::BufReader;
@@ -344,29 +350,28 @@ impl TUI{
         println!("File successfully read.");
         Ok(())
     }
-    fn exit_cmd(&mut self,_:&[&str])->CSResult<()>{
+    fn exit_cmd(&mut self,_:&[&str],_:&'static str)->CSResult<()>{
         self.done_program=true;
         Ok(())
     }
-    fn usage_cmd(&mut self,_:&[&str])->CSResult<()>{
-        println!("Usage: Write names of cubes and their tiers and fusions with other cubes.\n\
-            + means that more than one set of arguments can be repeated enclosed in ()+ (Example: add cube1 0 cube2 1 cube3 3\n\
-            Commands: <add ((cube_name) (Tier))+>,<remove|drop|destroy (cube_name)+>,<rename (cube_name) to (new_cube_name)>,<read (cube_name)+>,\n\
-            <read_all>,<link|fuse (cube_name) with (cube_1) (cube_2)?>,\n\
-            <merge (cube_a) (cube_b) in (this_cube)><unlink_all|unfuse_all (cube_name)+>,<unlink|unfuse (cube_1) (cube_2)? in (cube_name)>,\n\
-            <remove_all|drop_all|destroy_all>,<change_tier (cube_name) (this_tier)>,<get_fusions (cube)>,<build_tree (cube)>\n\
-            <save_to|write_to (file_name)>,<load_from (file_name)>,<exit>");
+    fn usage_cmd(&mut self,_:&[&str],_:&'static str)->CSResult<()>{
+        println!("Format: <command arg1 arg2 ...>\n\
+        + means more than 1 set of arguments can also be added\n\
+        ? means that an argument is optional\n\
+        Command may have more than 1 name delimited with |");
+        println!("{}",self.usage_str);
         Ok(())
     }
-    fn not_found_cmd(&mut self,args:&[&str])->CSResult<()>{
+    fn not_found_cmd(&mut self,args:&[&str],_:&str)->CSResult<()>{
         Err(super::error::CSError::InvalidCommand(args[0].to_string()))
     }
     #[cfg(test)]
     fn test_multiple_commands(&mut self,args:Box<[Box<[&str]>]>)->CSResult<()>{
-        let commands_hm=commands::get_commands_hashmap();
         for args in args.iter(){
             println!("\x1b[1mReading command {args:?}\x1b[0m");
-            if let Err(e)=commands_hm.get(args[0]).unwrap_or(&(Self::not_found_cmd as commands::Commands))(self,&args){
+            let default_cmd=&(Self::not_found_cmd as commands::Commands,"");
+            let command_unwrap_tup=self.hm_command.get(args[0]).unwrap_or(default_cmd);
+            if let Err(e)=command_unwrap_tup.0(self,&args,command_unwrap_tup.1){
                 return Err(e)
             }
         }
