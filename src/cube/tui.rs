@@ -50,6 +50,7 @@ use std::io::Read;
 use super::CubeStruct;
 use super::error::CSError;
 use super::error::CSResult;
+use rustyline::Editor;
 ///Asserting characters are UTF-8 valid and can't be null
 fn check_valid_cube_name(arg:&str)->CSResult<()>{
     if arg=="?"{ return Ok(()) }
@@ -66,6 +67,30 @@ fn check_valid_cube_name(arg:&str)->CSResult<()>{
 impl TUI{
     pub fn new()->Self{
         Self{cdll:Default::default(),done_program:false}
+    }
+    pub fn program_loop(&mut self){
+        let commands_hm=commands::get_commands_hashmap();
+        let mut rl=Editor::<()>::new().expect("Unable to setup program loop.");
+        if rl.load_history("cmd_history.txt").is_err(){ println!("Commands not saved yet.") }
+        while !self.done_program{
+            println!("\nType \"usage\" for commands. Type \"exit\" to exit the program");
+            let readline=rl.readline("> ");
+            use rustyline::error::ReadlineError;
+            match readline{
+                Ok(line)=>{
+                    rl.add_history_entry(line.as_str());
+                    let args:Box<_>=line.split_whitespace().collect();
+                    if let Err(e)=commands_hm.get(args[0]).unwrap_or(&(Self::not_found_cmd as commands::Commands))(self,&args){
+                        do_print_error!("Error has occured: {e:?}: {e}");
+                    }
+                },
+                Err(ReadlineError::Io(e))=>{
+                    do_print_error!("Error has occured: {e:?}: {e}");
+                },
+                _=>{ do_print_error!("Unknown unimplemented error."); return }
+            }
+        }
+        if rl.save_history("cmd_history.txt").is_err(){ do_print_error!("Couldn't save commands."); }
     }
     fn add_cmd(&mut self,args:&[&str])->CSResult<()>{
         if args.len()%2==0{
@@ -335,21 +360,6 @@ impl TUI{
     }
     fn not_found_cmd(&mut self,args:&[&str])->CSResult<()>{
         Err(super::error::CSError::InvalidCommand(args[0].to_string()))
-    }
-    pub fn program_loop(&mut self)->std::io::Result<()>{
-        use std::io::Write;
-        let commands_hm=commands::get_commands_hashmap();
-        while !self.done_program{
-            print!("\nType \"usage\" for commands. Type \"exit\" to exit the program\n> ");
-            std::io::stdout().flush()?;
-            let mut buf=String::new();
-            std::io::stdin().read_line(&mut buf)?;
-            let args:Box<_>=buf.split_whitespace().collect();
-            if let Err(e)=commands_hm.get(args[0]).unwrap_or(&(Self::not_found_cmd as commands::Commands))(self,&args){
-                do_print_error!("Error has occured: {e:?}: {e}");
-            }
-        }
-        Ok(())
     }
     #[cfg(test)]
     fn test_multiple_commands(&mut self,args:Box<[Box<[&str]>]>)->CSResult<()>{

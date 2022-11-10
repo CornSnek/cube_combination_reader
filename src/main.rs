@@ -1,6 +1,5 @@
 mod cube;
-fn main()->std::io::Result<()>{
+fn main(){
     let mut tui_obj=cube::TUI::new();
-    tui_obj.program_loop()?;
-    Ok(())
+    tui_obj.program_loop();
 }
