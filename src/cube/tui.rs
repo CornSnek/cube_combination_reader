@@ -101,13 +101,27 @@ impl TUI{
                 Err(ReadlineError::Io(e))=>{
                     do_print_error!("Error has occured: {e:?}: {e}");
                 },
-                _=>{ do_print_error!("Unknown unimplemented error."); return }
+                Err(ReadlineError::Interrupted|ReadlineError::Eof)=>{
+                    do_print_error!(concat!("Program has ended early. Saving any unsaved data to ",SWF!(Temp),"."));
+                    if let Err(e)=self.save_temp(){
+                        do_print_error!("Saving error has occured: {e:?}: {e}");
+                    }
+                    return
+                }
+                _=>{ 
+                    do_print_error!("Unknown unimplemented error. Exiting early.");
+                    do_print_error!(concat!("Saving any unsaved data to ",SWF!(Temp),"."));
+                    if let Err(e)=self.save_temp(){
+                        do_print_error!("Saving error has occured: {e:?}: {e}");
+                    }
+                    return 
+                }
             }
         }
         if rl.save_history("cmd_history.txt").is_err(){ do_print_error!("Couldn't save commands."); }
-        println!(concat!("Exiting program. Saving any unsaved data to ",SWF!(Temp)));
+        println!(concat!("Exiting program. Saving any unsaved data to ",SWF!(Temp),"."));
         if let Err(e)=self.save_temp(){
-            do_print_error!("Error has occured: {e:?}: {e}");
+            do_print_error!("Saving error has occured: {e:?}: {e}");
         }
     }
     fn add_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
@@ -320,6 +334,9 @@ impl TUI{
     fn save_to_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
         if args.len()!=2{
             return Err(CSError::InvalidArguments(usage))
+        }
+        if args[1]=="temp.sav"{
+            return Err(CSError::InvalidArguments(concat!("File name '",SWF!(Temp),"' shouldn't be a file name because the file will be overwritten after this program exits.")))
         }
         use std::fs::File;
         use std::io::Write;
