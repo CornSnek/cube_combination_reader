@@ -44,8 +44,8 @@ impl FuseKey{
 impl Display for FuseKey{
     fn fmt(&self, f: &mut Formatter<'_>)->Result<(),std::fmt::Error> {
         match self{
-            Self::Single(s)=>write!(f,"{s}?"),
-            Self::Pair(s1,s2)=>write!(f,"{s1}/{s2}")
+            Self::Single(s)=>write!(f,"({s}?)"),
+            Self::Pair(s1,s2)=>write!(f,"({s1},{s2})")
         }
     }
 }
@@ -221,12 +221,24 @@ impl CubeDLL{
         if csl1.borrow().name==csl_p.borrow().name||csl2.borrow().name==csl_p.borrow().name {
             return Err(error::CSError::SameStruct("CubeDLL::link_at_p_fb_pair",csl_p.borrow().name.clone()))
         }
-        if csl_p.borrow().name!="?"{
-            if let Some(qcsl)=self.hashmap.get(&"?".to_string()){
-                let key=FuseKey::new_pair(&csl1.borrow().name,&csl2.borrow().name);
-                if qcsl.borrow_mut().fused_by.remove(&key).is_some(){
-                    println!("Cube FuseKey \"{key}\" has been removed for ?");
+        if let Some(qcsl)=self.hashmap.get(&"?".to_string()){
+            let cmp_key=FuseKey::new_pair(&csl1.borrow().name,&csl2.borrow().name);
+            if csl_p.borrow().name!="?"{
+                if qcsl.borrow_mut().fused_by.remove(&cmp_key).is_some(){
+                    println!("Cube FuseKey \"{cmp_key}\" has been removed for ?");
                 }
+            }else{
+                let mut key_exists=false;
+                'found_key: for csl in self.hashmap.values(){
+                    for fuse_key in csl.borrow().fused_by.keys(){
+                        if fuse_key==&cmp_key{
+                            println!("Cube FuseKey \"{cmp_key}\" cannot be added for ? as it already exists as known.");
+                            key_exists=true;
+                            break 'found_key
+                        }
+                    }
+                }
+                if key_exists{ return Ok(()) }
             }
         }
         csl_p.borrow_mut().add_fb_pair(csl1,csl2);
@@ -243,12 +255,24 @@ impl CubeDLL{
         if csl.borrow().name==csl_p.borrow().name {
             return Err(error::CSError::SameStruct("CubeDLL::link_at_p_fb_single",csl_p.borrow().name.clone()))
         }
-        if csl_p.borrow().name!="?"{
-            if let Some(qcsl)=self.hashmap.get(&"?".to_string()){
-                let key=FuseKey::new_single(&csl.borrow().name);
-                if qcsl.borrow_mut().fused_by.remove(&key).is_some(){
-                    println!("Cube FuseKey \"{key}\" has been removed for ?");
+        if let Some(qcsl)=self.hashmap.get(&"?".to_string()){
+            let cmp_key=FuseKey::new_single(&csl.borrow().name);
+            if csl_p.borrow().name!="?"{
+                if qcsl.borrow_mut().fused_by.remove(&cmp_key).is_some(){
+                    println!("Cube FuseKey \"{cmp_key}\" has been removed for ?");
                 }
+            }else{
+                let mut key_exists=false;
+                'found_key: for csl in self.hashmap.values(){
+                    for fuse_key in csl.borrow().fused_by.keys(){
+                        if fuse_key==&cmp_key{
+                            println!("Cube FuseKey \"{cmp_key}\" cannot be added for ? as it already exists as known.");
+                            key_exists=true;
+                            break 'found_key
+                        }
+                    }
+                }
+                if key_exists{ return Ok(()) }
             }
         }
         csl_p.borrow_mut().add_fb_single(csl);
