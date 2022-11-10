@@ -37,7 +37,6 @@ mod commands{
         cmd_hm.insert("drop_all",TUI::rem_all_cmd);
         cmd_hm.insert("destroy_all",TUI::rem_all_cmd);
         cmd_hm.insert("change_tier",TUI::change_tier_cmd);
-        cmd_hm.insert("search_fusions",TUI::search_fusions_cmd);
         cmd_hm.insert("usage",TUI::usage_cmd);
         cmd_hm
     }
@@ -208,15 +207,6 @@ impl TUI{
             self.cdll.remove_all_cubes();
             println!("All cubes in the program have been removed.");
         }
-        Ok(())
-    }
-    fn search_fusions_cmd(&mut self,args:&[&str])->CSResult<()>{
-        if args.len()!=2{
-            return Err(CSError::InvalidArguments("<search_fusions (cube)>"))
-        }
-        check_valid_cube_name(args[1])?;
-        println!("Printing cubes that have {} as its cube fusion:",args[1]);
-        self.cdll.get_fusions(&args[1].to_string())?;
         Ok(())
     }
     fn yn_loop(&self,msg:String)->Result<bool,CSError>{

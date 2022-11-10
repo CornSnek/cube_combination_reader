@@ -374,23 +374,6 @@ impl CubeDLL{
             Ok(())
         }else{ unreachable!("Shouldn't be accessed. Should use point_to()") }
     }
-    fn get_fusions(&self,name:&String)->CSResult<()>{
-        if self.hashmap.get(name).is_none(){
-            return Err(error::CSError::NonExistentName("CubeDLL::get_fusions",name.clone()))
-        }
-        for csl in self.hashmap.values(){
-            let cs=csl.borrow();
-            let mut do_print=false;
-            for key in cs.fused_by.keys(){
-                if key.contains_key(name){
-                    do_print=true;
-                    break
-                }
-            }
-            if do_print{ println!("{cs}"); }
-        }
-        Ok(())
-    }
     fn get_info_cube_paths(&self){
         println!("Syntax: fused_by: [fuse key array (single/pair)] => [[this cube name]](tier) => converts_to: [cube name array]");
         for csl in self.hashmap.values(){
