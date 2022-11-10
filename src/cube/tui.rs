@@ -26,7 +26,7 @@ mod commands{
         cmd_hm.insert("read_all",(TUI::read_all_cmd,"<read_all>"));
         cmd_hm.insert("link",(TUI::link_cmd,"<fuse|link (cube_name) with (cube_1) (cube_2)?>")); 
         cmd_hm.insert("fuse",(TUI::link_cmd,"<fuse|link (cube_name) with (cube_1) (cube_2)?>"));
-        cmd_hm.insert("merge",(TUI::merge_cmd,"<merge (cube_a) (cube_b) in (tui_cube)>"));
+        cmd_hm.insert("merge",(TUI::merge_cmd,"<merge (cube_a) (cube_b) in (cube_name)>"));
         cmd_hm.insert("unlink",(TUI::unlink_cmd,"<unfuse|unlink (cube_1) (cube_2)? in (cube_name)>"));
         cmd_hm.insert("unfuse",(TUI::unlink_cmd,"<unfuse|unlink (cube_1) (cube_2)? in (cube_name)>"));
         cmd_hm.insert("unlink_all",(TUI::unlink_all_cmd,"<unfuse_all|unlink_all (cube_name)+>"));
@@ -41,7 +41,8 @@ mod commands{
         cmd_hm.insert("change_tier",(TUI::change_tier_cmd,"<change_tier (cube_name) (this_tier)>"));
         cmd_hm.insert("get_fusions",(TUI::get_fusions_cmd,"<get_fusions (cube_name)>"));
         cmd_hm.insert("build_tree",(TUI::build_tree_cmd,"<build_tree (cube_name)>"));
-        cmd_hm.insert("starts_with",(TUI::starts_with_cmd,"<starts_with (partial cube_name)>"));
+        cmd_hm.insert("find",(TUI::find_cmd,"<find|search starts_with|contains (partial case_insensitive cube_name)>"));
+        cmd_hm.insert("search",(TUI::find_cmd,"<find|search starts_with|contains (partial case_insensitive cube_name)>"));
         cmd_hm.insert("usage",(TUI::usage_cmd,"<usage>"));
         cmd_hm
     }
@@ -72,13 +73,11 @@ impl TUI{
         let hm_command=commands::get_commands_hashmap();
         let mut usage_str_box=hm_command.values().map(|i|i.1.to_string()).collect::<Box<_>>();
         usage_str_box.sort_unstable();
-        let usage_len=usage_str_box.len();
-        let mut usage_i=0usize;
         Self{cdll:Default::default(),
             done_program:false,
             hm_command,
-            usage_str:usage_str_box.iter().fold(String::new(),|res,str|{
-                usage_i+=1; res+str+if usage_i!=usage_len{"\n"}else{""}
+            usage_str:usage_str_box.iter().enumerate().fold(String::new(),|res,i|{
+                res+i.1+if i.0!=usage_str_box.len()-1{"\n"}else{""}
             })
         }//usage_str_box.concat(), but adds "\n" near the end of each string except the last.
     }
@@ -269,16 +268,37 @@ impl TUI{
         self.cdll.build_tree_at_p()?;
         Ok(())
     }
-    fn starts_with_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
-        if args.len()!=2{
+    fn find_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
+        if args.len()!=3{
             return Err(CSError::InvalidArguments(usage))
         }
-        check_valid_cube_name(args[1])?;
-        println!("Finding cube names starting with {}",args[1]);
-        print!("{}",self.cdll.hashmap.keys().filter(|&k|k.starts_with(args[1])).enumerate().fold(String::new(),
-            |res,t|res+(t.0+1).to_string().as_str()+": "+t.1+"\n"
-        ));
-        return_if_error!(std::io::Write::flush(&mut std::io::stdout()));
+        check_valid_cube_name(args[2])?;
+        let result=match args[1]{
+            "starts_with"=>{ //to_lowercase to be case-insensitive
+                println!("Finding cube names starting with '{}'",args[2]);
+                let result=self.cdll.hashmap.keys().filter(|&k|
+                    k.to_lowercase().starts_with(&args[2].to_lowercase()))
+                .enumerate().fold(String::new(),|res,t|
+                    res+&((t.0+1).to_string())+": "+t.1+"\n"
+                );
+                if !result.is_empty(){
+                    result[..=result.len()-2].to_string() //-2 to exclude trailing \n and 0-indexing
+                }else{"(None found)".to_string()}
+            }
+            "contains"=>{
+                println!("Finding cube names containing substring '{}'",args[2]);
+                let result=self.cdll.hashmap.keys().filter(|&k|
+                    k.to_lowercase().contains(&args[2].to_lowercase()))
+                .enumerate().fold(String::new(),|res,t|
+                    res+&(t.0+1).to_string()+": "+t.1+"\n"
+                );
+                if !result.is_empty(){
+                    result[..=result.len()-2].to_string()
+                }else{"(None found)".to_string()}
+            }
+            _=>return Err(CSError::InvalidArguments(usage))
+        };
+        println!("{result}");
         Ok(())
     }
     fn yn_loop(&self,msg:String)->Result<bool,CSError>{
