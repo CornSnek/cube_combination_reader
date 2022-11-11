@@ -401,13 +401,22 @@ impl TUI{
             for fcs in valid_fcs.split(",").collect::<Box<_>>().iter(){
                 let mut iter3=fcs.split('|');
                 let (Some(fc1),fc2_opt,None)=(iter3.next(),iter3.next(),iter3.next()) else{ //Size can be either 1 or 2, but never 3+
-                    return Err(CSError::ParseError("TUI::read_to_file",format!("Line {i}: There should only be 2 cube names delimited with one | ending with , or ;")))
+                    return Err(CSError::ParseError("TUI::read_to_file",format!("Line {i}: There should only be 1 or 2 cube names delimited with ,")))
                 };
-                check_valid_cube_name(fc1)?;
-                if fc2_opt.is_none()&&fc1.strip_suffix('?').is_none(){
-                    return Err(CSError::ParseError("TUI::read_to_file",format!("Line {i}: Missing question-mark for a single fuse key at field fused_by")))
-                }else{
-                    check_valid_cube_name(fc2_opt.unwrap())?;
+                match fc1.strip_suffix('?'){
+                    Some(fc1)=>{
+                        let None=fc2_opt else{
+                            return Err(CSError::ParseError("TUI::read_to_file",format!("Line {i}: There should only be 1 cube name ending with ?, or ?;")))
+                        };
+                        check_valid_cube_name(fc1)?;
+                    },
+                    None=>{
+                        let Some(fc2)=fc2_opt else{
+                            return Err(CSError::ParseError("TUI::read_to_file",format!("Line {i}: There should only be 2 cube names delimited with one | ending with , or ;")))
+                        };
+                        check_valid_cube_name(fc1)?; 
+                        check_valid_cube_name(fc2)?;
+                    }
                 }
                 link_strs.push((cube_name,fc1,fc2_opt));
             }
