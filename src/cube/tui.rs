@@ -43,6 +43,7 @@ mod commands{
         cmd_hm.insert("build_tree",(TUI::build_tree_cmd,"<build_tree (cube_name)>","Gets all associated cube fusions to make this cube."));
         cmd_hm.insert("find",(TUI::find_cmd,"<find|search starts_with|contains (partial cube_name)>","Finds all associated cube names within the program (case-insensitive)"));
         cmd_hm.insert("search",(TUI::find_cmd,"<find|search starts_with|contains (partial cube_name)>","Finds all associated cube names within the program (case-insensitive)"));
+        cmd_hm.insert("todo",(TUI::todo_cmd,"<todo>","Finds tiers that have not been set yet (-1), finds single fusions not set yet to double, and finds ? fusions."));
         cmd_hm.insert("usage",(TUI::usage_cmd,"<usage>","Sees all commands used within the program"));
         cmd_hm
     }
@@ -99,7 +100,7 @@ impl TUI{
                     match args[0]{
                         "destroy_all"|"drop_all"|"remove_all"|"save_to"|"write_to"|"load_from"| //These 6 implicitly do self.has_saved if y is entered.
                         "read"|"read_all"|"get_fusions"|"build_tree"| //These commands and below just reads all the data or do nothing to the data.
-                        "find"|"search"|"usage"|"exit"=>(),
+                        "find"|"search"|"usage"|"todo"|"exit"=>(),
                         _=>self.has_saved=false,
                     }
                 },
@@ -258,7 +259,6 @@ impl TUI{
         if args[1]=="?"{ return Err(CSError::InvalidArguments("? does not have a tier")) }
         let tier={ match args[2].parse::<i32>(){ Ok(tier)=>{ tier } Err(e)=> return ErrToCSErr!(e) } };
         self.cdll.change_tier_at_p(tier)?;
-        println!("Tier changed to {tier} for cube \"{}\"",args[1]);
         Ok(())
     }
     fn rem_all_cmd(&mut self,_:&[&str],_:&'static str)->CSResult<()>{
@@ -318,6 +318,10 @@ impl TUI{
             _=>return Err(CSError::InvalidArguments(usage))
         };
         println!("{result}");
+        Ok(())
+    }
+    fn todo_cmd(&mut self,_:&[&str],_:&'static str)->CSResult<()>{
+        self.cdll.print_todo();
         Ok(())
     }
     fn yn_loop(&self,msg:String)->Result<bool,CSError>{

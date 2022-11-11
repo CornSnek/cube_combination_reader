@@ -52,7 +52,8 @@ impl Display for FuseKey{
 }
 impl CubeStruct{
     fn new(name:String,tier:i32)->Self{
-        Self{name,tier,converts_to:HashMap::new(),fused_by:HashMap::new()}
+        if tier < -1{ println!("Tier changed to -1 instead of {tier}") }
+        Self{name,tier:tier.max(-1),converts_to:HashMap::new(),fused_by:HashMap::new()}
     }
     fn add_to(&mut self,other:&Link){
         let other_str=other.borrow().name.clone();
@@ -440,7 +441,8 @@ impl CubeDLL{
     }
     fn change_tier_at_p(&self,to_this_tier:i32)->CSResult<()>{
         let Some(csl_p)=&self.pointer else {return Err(error::CSError::NullPointer("CubeDLL::change_tier_at_p")) };
-        csl_p.borrow_mut().tier=to_this_tier;
+        if to_this_tier < -1{ println!("Tier changed to -1 instead of {to_this_tier}") }
+        csl_p.borrow_mut().tier=to_this_tier.max(-1);
         Ok(())
     }
     fn merge_keys_at_p(&self,cs_n1:String,cs_n2:String)->CSResult<()>{
@@ -482,7 +484,7 @@ impl CubeDLL{
         let cs_str=csl_p.borrow().name.clone();
         println!("Getting Combinations to get {}",cs_str);
         let mut build_str:Vec<(usize,String)>=Vec::new();
-        self.build_tree_recurse(cs_str,&mut hm_visited,1,&mut build_str);
+        self.build_tree_recurse(cs_str,&mut hm_visited,0,&mut build_str);
         build_str.sort_unstable(); //Print sorted by build_tier.
         println!("{}",build_str.into_iter().map(|i|i.1).collect::<Box<_>>().concat());
         Ok(())
@@ -504,6 +506,27 @@ impl CubeDLL{
                     }
                 }
             }
+        }
+    }
+    fn print_todo(&self){
+        for (str,csl) in self.hashmap.iter(){
+            if str!="?"{
+                if csl.borrow().tier==-1{
+                    println!("{str} cube has tier -1");
+                }
+                for fuse_key in csl.borrow().fused_by.keys(){
+                    if let &FuseKey::Single(_)=fuse_key{
+                        println!("{str} contains a single fuse key {fuse_key}");
+                    }
+                }
+            }
+        }
+        if let Some(qcsl)=self.hashmap.get("?"){
+            println!("Printing fusion keys to unknown '?' Cubes");
+            for fuse_key in qcsl.borrow().fused_by.keys(){
+                print!("{}, ",fuse_key);
+            }
+            println!("\n")
         }
     }
 }
