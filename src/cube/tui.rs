@@ -9,52 +9,54 @@ pub struct TUI{
     cdll:super::CubeDLL,
     done_program:bool,
     hm_command:commands::CommandHashMap<'static>,
-    usage_str:String,
+    has_saved:bool
 }
 mod commands{
     use super::{TUI,super::error::CSResult};
-    pub type CommandHashMap<'a>=std::collections::HashMap<&'a str,(Commands<'a>,&'a str)>;
+    pub type CommandHashMap<'a>=std::collections::HashMap<&'a str,(Commands<'a>,&'a str, &'a str)>;
     pub type Commands<'a>=fn(&mut TUI, &[&str], &'a str)->CSResult<()>;
     pub fn get_commands_hashmap()->CommandHashMap<'static>{
         let mut cmd_hm=CommandHashMap::new();
-        cmd_hm.insert("add",(TUI::add_cmd,"<add ((cube_name) (Tier))+>"));
-        cmd_hm.insert("remove",(TUI::rm_cmd,"<destroy|drop|remove (cube_name)+>"));
-        cmd_hm.insert("drop",(TUI::rm_cmd,"<destroy|drop|remove (cube_name)+>"));
-        cmd_hm.insert("destroy",(TUI::rm_cmd,"<destroy|drop|remove (cube_name)+>"));
-        cmd_hm.insert("rename",(TUI::rename_cmd,"<rename (cube) to (new_name)>"));
-        cmd_hm.insert("read",(TUI::read_cmd,"<read (cube_name)+>"));
-        cmd_hm.insert("read_all",(TUI::read_all_cmd,"<read_all>"));
-        cmd_hm.insert("link",(TUI::link_cmd,"<fuse|link (cube_name) with (cube_1) (cube_2)?>")); 
-        cmd_hm.insert("fuse",(TUI::link_cmd,"<fuse|link (cube_name) with (cube_1) (cube_2)?>"));
-        cmd_hm.insert("merge",(TUI::merge_cmd,"<merge (cube_a) (cube_b) in (cube_name)>"));
-        cmd_hm.insert("unlink",(TUI::unlink_cmd,"<unfuse|unlink (cube_1) (cube_2)? in (cube_name)>"));
-        cmd_hm.insert("unfuse",(TUI::unlink_cmd,"<unfuse|unlink (cube_1) (cube_2)? in (cube_name)>"));
-        cmd_hm.insert("unlink_all",(TUI::unlink_all_cmd,"<unfuse_all|unlink_all (cube_name)+>"));
-        cmd_hm.insert("unfuse_all",(TUI::unlink_all_cmd,"<unfuse_all|unlink_all (cube_name)+>"));
-        cmd_hm.insert("exit",(TUI::exit_cmd,"<exit>"));
-        cmd_hm.insert("save_to",(TUI::save_to_cmd,"<save_to (file_name)>"));
-        cmd_hm.insert("write_to",(TUI::save_to_cmd,"<save_to (file_name)>"));
-        cmd_hm.insert("load_from",(TUI::load_from_cmd,"<load_from (file_name)>"));
-        cmd_hm.insert("remove_all",(TUI::rem_all_cmd,"<destroy_all|drop_all|remove_all>"));
-        cmd_hm.insert("drop_all",(TUI::rem_all_cmd,"<destroy_all|drop_all|remove_all>"));
-        cmd_hm.insert("destroy_all",(TUI::rem_all_cmd,"<destroy_all|drop_all|remove_all>"));
-        cmd_hm.insert("change_tier",(TUI::change_tier_cmd,"<change_tier (cube_name) (this_tier)>"));
-        cmd_hm.insert("get_fusions",(TUI::get_fusions_cmd,"<get_fusions (cube_name)>"));
-        cmd_hm.insert("build_tree",(TUI::build_tree_cmd,"<build_tree (cube_name)>"));
-        cmd_hm.insert("find",(TUI::find_cmd,"<find|search starts_with|contains (partial case_insensitive cube_name)>"));
-        cmd_hm.insert("search",(TUI::find_cmd,"<find|search starts_with|contains (partial case_insensitive cube_name)>"));
-        cmd_hm.insert("usage",(TUI::usage_cmd,"<usage>"));
+        cmd_hm.insert("add",(TUI::add_cmd,"<add ((cube_name) (Tier))+>","Adds cube with name and tier"));
+        cmd_hm.insert("remove",(TUI::rm_cmd,"<destroy|drop|remove (cube_name)+>","Destroys a cube and all its links with other cubes"));
+        cmd_hm.insert("drop",(TUI::rm_cmd,"<destroy|drop|remove (cube_name)+>","Destroys a cube and all its links with other cubes"));
+        cmd_hm.insert("destroy",(TUI::rm_cmd,"<destroy|drop|remove (cube_name)+>","Destroys a cube and all its links with other cubes"));
+        cmd_hm.insert("rename",(TUI::rename_cmd,"<rename (cube) to (new_name)>","Renames a cube and all its links with will be changed to that name"));
+        cmd_hm.insert("read",(TUI::read_cmd,"<read (cube_name)+>","Reads a cube's properties and also reads cubes with associated fusions"));
+        cmd_hm.insert("read_all",(TUI::read_all_cmd,"<read_all>","Reads all cubes' properties in the program"));
+        cmd_hm.insert("link",(TUI::link_cmd,"<fuse|link (cube_name) with (cube_1) (cube_2)?>","Links 1 or 2 cubes together for a cube_name")); 
+        cmd_hm.insert("fuse",(TUI::link_cmd,"<fuse|link (cube_name) with (cube_1) (cube_2)?>","Links 1 or 2 cubes together for a cube_name"));
+        cmd_hm.insert("merge",(TUI::merge_cmd,"<merge (cube_a) (cube_b) in (cube_name)>","Merge links of single cubes using link commands"));
+        cmd_hm.insert("unlink",(TUI::unlink_cmd,"<unfuse|unlink (cube_1) (cube_2)? in (cube_name)>","Unlinks cube fusions for the specified cube_name"));
+        cmd_hm.insert("unfuse",(TUI::unlink_cmd,"<unfuse|unlink (cube_1) (cube_2)? in (cube_name)>","Unlinks cube fusions for the specified cube_name"));
+        cmd_hm.insert("unlink_all",(TUI::unlink_all_cmd,"<unfuse_all|unlink_all (cube_name)+>","Unlinks all fusions and associations of conversions for a cube"));
+        cmd_hm.insert("unfuse_all",(TUI::unlink_all_cmd,"<unfuse_all|unlink_all (cube_name)+>","Unlinks all fusions and associations of conversions for a cube"));
+        cmd_hm.insert("exit",(TUI::exit_cmd,"<exit>","Exits the program. Will ask to save unsaved data if any."));
+        cmd_hm.insert("save_to",(TUI::save_to_cmd,"<save_to (file_name)>","Saves data to a text file"));
+        cmd_hm.insert("write_to",(TUI::save_to_cmd,"<save_to (file_name)>","Saves data to a text file"));
+        cmd_hm.insert("load_from",(TUI::load_from_cmd,"<load_from (file_name)>","Loads data from a text file"));
+        cmd_hm.insert("remove_all",(TUI::rem_all_cmd,"<destroy_all|drop_all|remove_all>","Clears all cube data in the program"));
+        cmd_hm.insert("drop_all",(TUI::rem_all_cmd,"<destroy_all|drop_all|remove_all>","Clears all cube data in the program"));
+        cmd_hm.insert("destroy_all",(TUI::rem_all_cmd,"<destroy_all|drop_all|remove_all>","Clears all cube data in the program"));
+        cmd_hm.insert("change_tier",(TUI::change_tier_cmd,"<change_tier (cube_name) (this_tier)>","Changes a tier for a specified cube"));
+        cmd_hm.insert("get_fusions",(TUI::get_fusions_cmd,"<get_fusions (cube_name)>","Gets all cube fusions for the specified cube. Similar to read, but prints/enumerates cube fusions instead."));
+        cmd_hm.insert("build_tree",(TUI::build_tree_cmd,"<build_tree (cube_name)>","Gets all associated cube fusions to make this cube."));
+        cmd_hm.insert("find",(TUI::find_cmd,"<find|search starts_with|contains (partial cube_name)>","Finds all associated cube names within the program (case-insensitive)"));
+        cmd_hm.insert("search",(TUI::find_cmd,"<find|search starts_with|contains (partial cube_name)>","Finds all associated cube names within the program (case-insensitive)"));
+        cmd_hm.insert("usage",(TUI::usage_cmd,"<usage>","Sees all commands used within the program"));
         cmd_hm
     }
 }
 macro_rules! do_print_error{
     ($($arg:tt)*)=>{ eprint!("\x1b[1;33m"); eprint!($($arg)*); eprintln!("\x1b[0m"); }
 }
+use std::collections::HashSet;
 use std::io::Read;
 use super::CubeStruct;
 use super::error::CSError;
 use super::error::CSResult;
 use rustyline::Editor;
+use rustyline::config::Configurer;
 ///Asserting characters are UTF-8 valid and can't be null
 fn check_valid_cube_name(arg:&str)->CSResult<()>{
     if arg=="?"{ return Ok(()) }
@@ -71,18 +73,15 @@ fn check_valid_cube_name(arg:&str)->CSResult<()>{
 impl TUI{
     pub fn new()->Self{
         let hm_command=commands::get_commands_hashmap();
-        let mut usage_str_box=hm_command.values().map(|i|i.1.to_string()).collect::<Box<_>>();
-        usage_str_box.sort_unstable();
         Self{cdll:Default::default(),
             done_program:false,
             hm_command,
-            usage_str:usage_str_box.iter().enumerate().fold(String::new(),|res,i|{
-                res+i.1+if i.0!=usage_str_box.len()-1{"\n"}else{""}
-            })
-        }//usage_str_box.concat(), but adds "\n" near the end of each string except the last.
+            has_saved:true
+        }
     }
     pub fn program_loop(&mut self){
         let mut rl=Editor::<()>::new().expect("Unable to setup program loop.");
+        rl.set_max_history_size(100);
         if rl.load_history("cmd_history.txt").is_err(){ println!("Commands not saved yet.") }
         while !self.done_program{
             println!("\nType \"usage\" for commands. Type \"exit\" to exit the program");
@@ -92,36 +91,37 @@ impl TUI{
                 Ok(line)=>{
                     rl.add_history_entry(line.as_str());
                     let args:Box<_>=line.split_whitespace().collect();
-                    let default_cmd=&(Self::not_found_cmd as commands::Commands,"");
+                    let default_cmd=&(Self::not_found_cmd as commands::Commands,"","");
                     let command_unwrap_tup=self.hm_command.get(args[0]).unwrap_or(default_cmd);
                     if let Err(e)=command_unwrap_tup.0(self,&args,command_unwrap_tup.1){
                         do_print_error!("Error has occured: {e:?}: {e}");
+                    }
+                    match args[0]{
+                        "destroy_all"|"drop_all"|"remove_all"|"save_to"|"write_to"|"load_from"| //These 6 implicitly do self.has_saved if y is entered.
+                        "read"|"read_all"|"get_fusions"|"build_tree"| //These commands and below just reads all the data or do nothing to the data.
+                        "find"|"search"|"usage"|"exit"=>(),
+                        _=>self.has_saved=false,
                     }
                 },
                 Err(ReadlineError::Io(e))=>{
                     do_print_error!("Error has occured: {e:?}: {e}");
                 },
                 Err(ReadlineError::Interrupted|ReadlineError::Eof)=>{
-                    do_print_error!(concat!("Program has ended early. Saving any unsaved data to ",SWF!(Temp),"."));
-                    if let Err(e)=self.save_temp(){
-                        do_print_error!("Saving error has occured: {e:?}: {e}");
-                    }
-                    return
+                    do_print_error!("Program has ended early.");
+                    break
                 }
                 _=>{ 
-                    do_print_error!("Unknown unimplemented error. Exiting early.");
-                    do_print_error!(concat!("Saving any unsaved data to ",SWF!(Temp),"."));
-                    if let Err(e)=self.save_temp(){
-                        do_print_error!("Saving error has occured: {e:?}: {e}");
-                    }
-                    return 
+                    do_print_error!("Unknown error in program. Exiting early.");
+                    break
                 }
             }
         }
         if rl.save_history("cmd_history.txt").is_err(){ do_print_error!("Couldn't save commands."); }
-        println!(concat!("Exiting program. Saving any unsaved data to ",SWF!(Temp),"."));
-        if let Err(e)=self.save_temp(){
-            do_print_error!("Saving error has occured: {e:?}: {e}");
+        if !self.has_saved{
+            println!(concat!("Saving any unsaved data to ",SWF!(Temp),"."));
+            if let Err(e)=self.save_temp(){
+                do_print_error!("Saving error has occured: {e:?}: {e}");
+            }
         }
     }
     fn add_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
@@ -264,6 +264,7 @@ impl TUI{
     fn rem_all_cmd(&mut self,_:&[&str],_:&'static str)->CSResult<()>{
         if self.yn_loop(format!("All cube data will be erased without saving."))?{
             self.cdll.remove_all_cubes();
+            self.has_saved=true;
             println!("All cubes in the program have been removed.");
         }
         Ok(())
@@ -349,6 +350,7 @@ impl TUI{
         for (_,csl) in sorted.iter(){
             return_if_error!{writeln!(to_file,"{}",csl.borrow().save_write_str())}
         }
+        self.has_saved=true;
         Ok(())
     }
     fn save_temp(&mut self)->CSResult<()>{
@@ -421,9 +423,15 @@ impl TUI{
             }
         }
         println!("File successfully read.");
+        self.has_saved=true;
         Ok(())
     }
     fn exit_cmd(&mut self,_:&[&str],_:&'static str)->CSResult<()>{
+        if !self.has_saved{
+            if !self.yn_loop(format!("There may be unsaved cube data not saved yet."))?{
+                return Ok(())
+            }
+        }
         self.done_program=true;
         Ok(())
     }
@@ -432,7 +440,12 @@ impl TUI{
         + means more than 1 set of arguments can also be added\n\
         ? means that an argument is optional\n\
         Command may have more than 1 name delimited with |");
-        println!("{}",self.usage_str);
+        let mut unique_usage_str=HashSet::<&str>::new(); //To only show usages of multiple same name commands once.
+        let mut usage_str_box=self.hm_command.values().filter(|&&(_,s1,_)|unique_usage_str.insert(s1)).map(|&(_,s1,s2)|s1.to_string()+"\n\t"+s2).collect::<Box<_>>();
+        usage_str_box.sort_unstable();
+        println!("{}",usage_str_box.iter().enumerate().fold(String::new(),|res,(u,s)|{
+            res+s+if u!=usage_str_box.len()-1{"\n"}else{""}
+        }));
         Ok(())
     }
     fn not_found_cmd(&mut self,args:&[&str],_:&str)->CSResult<()>{
@@ -442,7 +455,7 @@ impl TUI{
     fn test_multiple_commands(&mut self,args:Box<[Box<[&str]>]>)->CSResult<()>{
         for args in args.iter(){
             println!("\x1b[1mReading command {args:?}\x1b[0m");
-            let default_cmd=&(Self::not_found_cmd as commands::Commands,"");
+            let default_cmd=&(Self::not_found_cmd as commands::Commands,"","");
             let command_unwrap_tup=self.hm_command.get(args[0]).unwrap_or(default_cmd);
             if let Err(e)=command_unwrap_tup.0(self,&args,command_unwrap_tup.1){
                 return Err(e)
