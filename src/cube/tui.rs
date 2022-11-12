@@ -1,52 +1,40 @@
-
-macro_rules! ErrToCSErr{
-    ($e:tt)=>{ Err(CSError::OtherError(Box::new($e))) }
-}
-macro_rules! return_if_error{
-    ($p:expr)=>(if let Err(e)=$p{ return ErrToCSErr!(e) })
-}
 pub struct TUI{
     cdll:super::CubeDLL,
     done_program:bool,
-    hm_command:commands::CommandHashMap<'static>,
+    hm_command:super::commands::CommandHashMap<'static,TUI>,
     has_saved:bool
 }
-mod commands{
-    use super::{TUI,super::error::CSResult};
-    pub type CommandHashMap<'a>=std::collections::HashMap<&'a str,(Commands<'a>,&'a str, &'a str)>;
-    pub type Commands<'a>=fn(&mut TUI, &[&str], &'a str)->CSResult<()>;
-    pub fn get_commands_hashmap()->CommandHashMap<'static>{
-        let mut cmd_hm=CommandHashMap::new();
-        cmd_hm.insert("add",(TUI::add_cmd,"<add ((cube_name) (Tier))+>","Adds cube with name and tier"));
-        cmd_hm.insert("remove",(TUI::rm_cmd,"<destroy|drop|remove (cube_name)+>","Destroys a cube and all its links with other cubes"));
-        cmd_hm.insert("drop",(TUI::rm_cmd,"<destroy|drop|remove (cube_name)+>","Destroys a cube and all its links with other cubes"));
-        cmd_hm.insert("destroy",(TUI::rm_cmd,"<destroy|drop|remove (cube_name)+>","Destroys a cube and all its links with other cubes"));
-        cmd_hm.insert("rename",(TUI::rename_cmd,"<rename (cube) to (new_name)>","Renames a cube and all its links with will be changed to that name"));
-        cmd_hm.insert("read",(TUI::read_cmd,"<read (cube_name)+>","Reads a cube's properties and also reads cubes with associated fusions"));
-        cmd_hm.insert("read_all",(TUI::read_all_cmd,"<read_all>","Reads all cubes' properties in the program"));
-        cmd_hm.insert("link",(TUI::link_cmd,"<fuse|link (cube_name) with (cube_1) (cube_2)?>","Links 1 or 2 cubes together for a cube_name")); 
-        cmd_hm.insert("fuse",(TUI::link_cmd,"<fuse|link (cube_name) with (cube_1) (cube_2)?>","Links 1 or 2 cubes together for a cube_name"));
-        cmd_hm.insert("merge",(TUI::merge_cmd,"<merge (cube_a) (cube_b) in (cube_name)>","Merge links of single cubes using link commands"));
-        cmd_hm.insert("unlink",(TUI::unlink_cmd,"<unfuse|unlink (cube_1) (cube_2)? in (cube_name)>","Unlinks cube fusions for the specified cube_name"));
-        cmd_hm.insert("unfuse",(TUI::unlink_cmd,"<unfuse|unlink (cube_1) (cube_2)? in (cube_name)>","Unlinks cube fusions for the specified cube_name"));
-        cmd_hm.insert("unlink_all",(TUI::unlink_all_cmd,"<unfuse_all|unlink_all (cube_name)+>","Unlinks all fusions and associations of conversions for a cube"));
-        cmd_hm.insert("unfuse_all",(TUI::unlink_all_cmd,"<unfuse_all|unlink_all (cube_name)+>","Unlinks all fusions and associations of conversions for a cube"));
-        cmd_hm.insert("exit",(TUI::exit_cmd,"<exit>","Exits the program. Will ask to save unsaved data if any."));
-        cmd_hm.insert("save_to",(TUI::save_to_cmd,"<save_to (file_name)>","Saves data to a text file"));
-        cmd_hm.insert("write_to",(TUI::save_to_cmd,"<save_to (file_name)>","Saves data to a text file"));
-        cmd_hm.insert("load_from",(TUI::load_from_cmd,"<load_from (file_name)>","Loads data from a text file"));
-        cmd_hm.insert("remove_all",(TUI::rem_all_cmd,"<destroy_all|drop_all|remove_all>","Clears all cube data in the program"));
-        cmd_hm.insert("drop_all",(TUI::rem_all_cmd,"<destroy_all|drop_all|remove_all>","Clears all cube data in the program"));
-        cmd_hm.insert("destroy_all",(TUI::rem_all_cmd,"<destroy_all|drop_all|remove_all>","Clears all cube data in the program"));
-        cmd_hm.insert("change_tier",(TUI::change_tier_cmd,"<change_tier (cube_name) (this_tier)>","Changes a tier for a specified cube"));
-        cmd_hm.insert("get_fusions",(TUI::get_fusions_cmd,"<get_fusions (cube_name)>","Gets all cube fusions for the specified cube. Similar to read, but prints/enumerates cube fusions instead."));
-        cmd_hm.insert("build_tree",(TUI::build_tree_cmd,"<build_tree (cube_name)>","Gets all associated cube fusions to make this cube."));
-        cmd_hm.insert("find",(TUI::find_cmd,"<find|search starts_with|contains (partial cube_name)>","Finds all associated cube names within the program (case-insensitive)"));
-        cmd_hm.insert("search",(TUI::find_cmd,"<find|search starts_with|contains (partial cube_name)>","Finds all associated cube names within the program (case-insensitive)"));
-        cmd_hm.insert("todo",(TUI::todo_cmd,"<todo>","Finds tiers that have not been set yet (-1), finds single fusions not set yet to double, and finds ? fusions."));
-        cmd_hm.insert("usage",(TUI::usage_cmd,"<usage>","Sees all commands used within the program"));
-        cmd_hm
-    }
+pub fn get_commands_hashmap()->super::commands::CommandHashMap<'static,TUI>{
+    let mut cmd_hm=super::commands::CommandHashMap::new();
+    cmd_hm.insert("add",(TUI::add_cmd,"<add ((cube_name) (Tier))+>","Adds cube with name and tier"));
+    cmd_hm.insert("remove",(TUI::rm_cmd,"<destroy|drop|remove (cube_name)+>","Destroys a cube and all its links with other cubes"));
+    cmd_hm.insert("drop",(TUI::rm_cmd,"<destroy|drop|remove (cube_name)+>","Destroys a cube and all its links with other cubes"));
+    cmd_hm.insert("destroy",(TUI::rm_cmd,"<destroy|drop|remove (cube_name)+>","Destroys a cube and all its links with other cubes"));
+    cmd_hm.insert("rename",(TUI::rename_cmd,"<rename (cube) to (new_name)>","Renames a cube and all its links with will be changed to that name"));
+    cmd_hm.insert("read",(TUI::read_cmd,"<read (cube_name)+>","Reads a cube's properties and also reads cubes with associated fusions"));
+    cmd_hm.insert("read_all",(TUI::read_all_cmd,"<read_all>","Reads all cubes' properties in the program"));
+    cmd_hm.insert("link",(TUI::link_cmd,"<fuse|link (cube_name) with (cube_1) (cube_2)?>","Links 1 or 2 cubes together for a cube_name")); 
+    cmd_hm.insert("fuse",(TUI::link_cmd,"<fuse|link (cube_name) with (cube_1) (cube_2)?>","Links 1 or 2 cubes together for a cube_name"));
+    cmd_hm.insert("merge",(TUI::merge_cmd,"<merge (cube_a) (cube_b) in (cube_name)>","Merge links of single cubes using link commands"));
+    cmd_hm.insert("unlink",(TUI::unlink_cmd,"<unfuse|unlink (cube_1) (cube_2)? in (cube_name)>","Unlinks cube fusions for the specified cube_name"));
+    cmd_hm.insert("unfuse",(TUI::unlink_cmd,"<unfuse|unlink (cube_1) (cube_2)? in (cube_name)>","Unlinks cube fusions for the specified cube_name"));
+    cmd_hm.insert("unlink_all",(TUI::unlink_all_cmd,"<unfuse_all|unlink_all (cube_name)+>","Unlinks all fusions and associations of conversions for a cube"));
+    cmd_hm.insert("unfuse_all",(TUI::unlink_all_cmd,"<unfuse_all|unlink_all (cube_name)+>","Unlinks all fusions and associations of conversions for a cube"));
+    cmd_hm.insert("exit",(TUI::exit_cmd,"<exit>","Exits the program. Will ask to save unsaved data if any."));
+    cmd_hm.insert("save_to",(TUI::save_to_cmd,"<save_to (file_name)>","Saves data to a text file"));
+    cmd_hm.insert("write_to",(TUI::save_to_cmd,"<save_to (file_name)>","Saves data to a text file"));
+    cmd_hm.insert("load_from",(TUI::load_from_cmd,"<load_from (file_name)>","Loads data from a text file"));
+    cmd_hm.insert("remove_all",(TUI::rem_all_cmd,"<destroy_all|drop_all|remove_all>","Clears all cube data in the program"));
+    cmd_hm.insert("drop_all",(TUI::rem_all_cmd,"<destroy_all|drop_all|remove_all>","Clears all cube data in the program"));
+    cmd_hm.insert("destroy_all",(TUI::rem_all_cmd,"<destroy_all|drop_all|remove_all>","Clears all cube data in the program"));
+    cmd_hm.insert("change_tier",(TUI::change_tier_cmd,"<change_tier (cube_name) (this_tier)>","Changes a tier for a specified cube"));
+    cmd_hm.insert("get_fusions",(TUI::get_fusions_cmd,"<get_fusions (cube_name)>","Gets all cube fusions for the specified cube. Similar to read, but prints/enumerates cube fusions instead."));
+    cmd_hm.insert("build_tree",(TUI::build_tree_cmd,"<build_tree (cube_name)>","Gets all associated cube fusions to make this cube."));
+    cmd_hm.insert("find",(TUI::find_cmd,"<find|search starts_with|contains (partial cube_name)>","Finds all associated cube names within the program (case-insensitive)"));
+    cmd_hm.insert("search",(TUI::find_cmd,"<find|search starts_with|contains (partial cube_name)>","Finds all associated cube names within the program (case-insensitive)"));
+    cmd_hm.insert("todo",(TUI::todo_cmd,"<todo>","Finds tiers that have not been set yet (-1), finds single fusions not set yet to double, and finds ? fusions."));
+    cmd_hm.insert("usage",(TUI::usage_cmd,"<usage>","Sees all commands used within the program"));
+    cmd_hm
 }
 macro_rules! do_print_error{
     ($($arg:tt)*)=>{ eprint!("\x1b[1;33m"); eprint!($($arg)*); eprintln!("\x1b[0m"); }
@@ -70,17 +58,18 @@ fn check_valid_cube_name(arg:&str)->CSResult<()>{
     }
     Ok(())
 }
-///All functions ending in _cmd is for a hashmap.
-impl TUI{
-    pub fn new()->Self{
-        let hm_command=commands::get_commands_hashmap();
+impl Default for TUI{
+    fn default()->Self{
         Self{cdll:Default::default(),
             done_program:false,
-            hm_command,
+            hm_command:get_commands_hashmap(),
             has_saved:true
         }
     }
-    pub fn program_loop(&mut self){
+}
+///All functions ending in _cmd is for a hashmap.
+impl TUI{
+    pub fn terminal_loop(&mut self){
         let mut rl=Editor::<()>::new().expect("Unable to setup program loop.");
         rl.set_max_history_size(100);
         if rl.load_history("cmd_history.txt").is_err(){ println!("Commands not saved yet.") }
@@ -92,9 +81,9 @@ impl TUI{
                 Ok(line)=>{
                     rl.add_history_entry(line.as_str());
                     let args:Box<_>=line.split_whitespace().collect();
-                    let default_cmd=&(Self::not_found_cmd as commands::Commands,"","");
+                    let default_cmd=&(Self::not_found_cmd as super::commands::Commands<Self>,"","");
                     let command_unwrap_tup=self.hm_command.get(args[0]).unwrap_or(default_cmd);
-                    if let Err(e)=command_unwrap_tup.0(self,&args,command_unwrap_tup.1){
+                    if let Err(e)=command_unwrap_tup.0(self,&args,command_unwrap_tup.1,&mut std::io::stdout()){
                         do_print_error!("Error has occured: {e:?}: {e}");
                     }
                     match args[0]{
@@ -125,7 +114,7 @@ impl TUI{
             }
         }
     }
-    fn add_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
+    fn add_cmd(&mut self,args:&[&str],usage:&'static str,w:&mut dyn std::io::Write)->CSResult<()>{
         if args.len()%2==0||args.len()==1{
             return Err(CSError::InvalidArguments(usage))
         }
@@ -137,11 +126,11 @@ impl TUI{
                 Ok(tier_num)=>{ self.cdll.add(CubeStruct::new(chunk[0].to_string(),tier_num))?; }
                 Err(e)=> return ErrToCSErr!(e)
             }
-            println!("Cube \"{}\" added",chunk[0]);
+            writeln_wrapper!(w,"Cube \"{}\" added",chunk[0]);
         }
         Ok(())
     }
-    fn rm_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
+    fn rm_cmd(&mut self,args:&[&str],usage:&'static str,w:&mut dyn std::io::Write)->CSResult<()>{
         if args.len()==1{
             return Err(CSError::InvalidArguments(usage))
         }
@@ -149,12 +138,12 @@ impl TUI{
             if cube_str==&"?"{ return Err(CSError::InvalidArguments("? cannot be destroyed. Use unlink command to remove ? links instead.")) }
             check_valid_cube_name(cube_str)?;
             self.cdll.point_to(cube_str.to_string())?;
-            self.cdll.destroy_at_p()?;
-            println!("Cube \"{cube_str}\" and all of its links have been destroyed.");
+            self.cdll.destroy_at_p(w)?;
+            writeln_wrapper!(w,"Cube \"{cube_str}\" and all of its links have been destroyed.");
         }
         Ok(())
     }
-    fn rename_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
+    fn rename_cmd(&mut self,args:&[&str],usage:&'static str,w:&mut dyn std::io::Write)->CSResult<()>{
         if args.len()!=4||args[2]!="to"{
             return Err(CSError::InvalidArguments(usage))
         }
@@ -164,26 +153,26 @@ impl TUI{
         check_valid_cube_name(args[1])?;
         check_valid_cube_name(args[3])?;
         self.cdll.point_to(args[1].to_string())?;
-        self.cdll.rename_at_p(args[3].to_string())?;
-        println!("Cube \"{}\" successfully renamed to \"{}\"",args[1],args[3]);
+        self.cdll.rename_at_p(args[3].to_string(),w)?;
+        writeln_wrapper!(w,"Cube \"{}\" successfully renamed to \"{}\"",args[1],args[3]);
         Ok(())
     }
-    fn read_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
+    fn read_cmd(&mut self,args:&[&str],usage:&'static str,w:&mut dyn std::io::Write)->CSResult<()>{
         if args.len()==1{
             return Err(CSError::InvalidArguments(usage))
         }
         for arg in &args[1..]{
             check_valid_cube_name(arg)?;
             self.cdll.point_to(arg.to_string())?;
-            self.cdll.get_info_p()?;
+            self.cdll.get_info_p(w)?;
         }
         Ok(())
     }
-    fn read_all_cmd(&mut self,_:&[&str],_:&'static str)->CSResult<()>{
-        self.cdll.get_info_cube_paths();
+    fn read_all_cmd(&mut self,_:&[&str],_:&'static str,w:&mut dyn std::io::Write)->CSResult<()>{
+        self.cdll.get_info_cube_paths(w)?;
         Ok(())
     }
-    fn link_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
+    fn link_cmd(&mut self,args:&[&str],usage:&'static str,w:&mut dyn std::io::Write)->CSResult<()>{
         let n@(4|5)=args.len() else{
             return Err(CSError::InvalidArguments(usage))
         };
@@ -195,17 +184,17 @@ impl TUI{
         check_valid_cube_name(args[3])?;
         if args[3]=="?"{ return Err(CSError::InvalidArguments("? cannot be used to fuse with another cube")) }
         if n==4{
-            self.cdll.link_at_p_fb_single(args[3].to_string())?;
-            println!("Successfully linked cube \"{}\" with \"{}\"",args[1],args[3]);
+            self.cdll.link_at_p_fb_single(args[3].to_string(),w)?;
+            writeln_wrapper!(w,"Successfully linked cube \"{}\" with \"{}\"",args[1],args[3]);
         }else{
             check_valid_cube_name(args[4])?;
             if args[4]=="?"{ return Err(CSError::InvalidArguments("? cannot be used to fuse with another cube")) }
-            self.cdll.link_at_p_fb_pair(args[3].to_string(),args[4].to_string())?;
-            println!("Successfully linked cube \"{}\" with \"{}\" and \"{}\"",args[1],args[3],args[4]);
+            self.cdll.link_at_p_fb_pair(args[3].to_string(),args[4].to_string(),w)?;
+            writeln_wrapper!(w,"Successfully linked cube \"{}\" with \"{}\" and \"{}\"",args[1],args[3],args[4]);
         }
         Ok(())
     }
-    fn merge_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
+    fn merge_cmd(&mut self,args:&[&str],usage:&'static str,w:&mut dyn std::io::Write)->CSResult<()>{
         if args.len()!=5||args[3]!="in"{
             return Err(CSError::InvalidArguments(usage))
         }
@@ -215,11 +204,11 @@ impl TUI{
         if args[2]=="?"{ return Err(CSError::InvalidArguments("? cannot be used to merge")) }
         check_valid_cube_name(args[4])?;
         self.cdll.point_to(args[4].to_string())?;
-        self.cdll.merge_keys_at_p(args[1].to_string(),args[2].to_string())?;
-        println!("Successfully merged keys \"{}\" with \"{}\" for \"{}\"",args[1],args[2],args[4]);
+        self.cdll.merge_keys_at_p(args[1].to_string(),args[2].to_string(),w)?;
+        writeln_wrapper!(w,"Successfully merged keys \"{}\" with \"{}\" for \"{}\"",args[1],args[2],args[4]);
         Ok(())
     }
-    fn unlink_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
+    fn unlink_cmd(&mut self,args:&[&str],usage:&'static str,w:&mut dyn std::io::Write)->CSResult<()>{
         let n@(4|5)=args.len() else{
             return Err(CSError::InvalidArguments(usage))
         };
@@ -234,11 +223,11 @@ impl TUI{
             check_valid_cube_name(args[2])?;
             if args[2]=="?"{ return Err(CSError::InvalidArguments("? cannot be unlinked with another cube")) }
         }
-        self.cdll.unlink_at_p_fb_keys(args[1].to_string(),if n==5{ Some(args[2].to_string()) }else{ None })?;
-        println!("Successfully removed for cube \"{}\"",args[n-1]);
+        self.cdll.unlink_at_p_fb_keys(args[1].to_string(),if n==5{ Some(args[2].to_string()) }else{ None },w)?;
+        writeln_wrapper!(w,"Successfully removed for cube \"{}\"",args[n-1]);
         Ok(())
     }
-    fn unlink_all_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
+    fn unlink_all_cmd(&mut self,args:&[&str],usage:&'static str,w:&mut dyn std::io::Write)->CSResult<()>{
         if args.len()==1{
             return Err(CSError::InvalidArguments(usage))
         }
@@ -246,11 +235,11 @@ impl TUI{
             check_valid_cube_name(arg)?;
             self.cdll.point_to(arg.to_string())?;
             self.cdll.unlink_at_p_fb()?;
-            println!("Successfully unlinked cube \"{arg}\"'s fused_by properties.");
+            writeln_wrapper!(w,"Successfully unlinked cube \"{arg}\"'s fused_by properties.");
         }
         Ok(())
     }
-    fn change_tier_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
+    fn change_tier_cmd(&mut self,args:&[&str],usage:&'static str,w:&mut dyn std::io::Write)->CSResult<()>{
         if args.len()!=3{
             return Err(CSError::InvalidArguments(usage))
         }
@@ -258,43 +247,43 @@ impl TUI{
         self.cdll.point_to(args[1].to_string())?;
         if args[1]=="?"{ return Err(CSError::InvalidArguments("? does not have a tier")) }
         let tier={ match args[2].parse::<i32>(){ Ok(tier)=>{ tier } Err(e)=> return ErrToCSErr!(e) } };
-        self.cdll.change_tier_at_p(tier)?;
+        self.cdll.change_tier_at_p(tier,w)?;
         Ok(())
     }
-    fn rem_all_cmd(&mut self,_:&[&str],_:&'static str)->CSResult<()>{
-        if self.yn_loop(format!("All cube data will be erased without saving."))?{
+    fn rem_all_cmd(&mut self,_:&[&str],_:&'static str,w:&mut dyn std::io::Write)->CSResult<()>{
+        if self.yn_loop(format!("All cube data will be erased without saving."),w)?{
             self.cdll.remove_all_cubes();
             self.has_saved=true;
-            println!("All cubes in the program have been removed.");
+            writeln_wrapper!(w,"All cubes in the program have been removed.");
         }
         Ok(())
     }
-    fn get_fusions_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
+    fn get_fusions_cmd(&mut self,args:&[&str],usage:&'static str,w:&mut dyn std::io::Write)->CSResult<()>{
         if args.len()!=2{
             return Err(CSError::InvalidArguments(usage))
         }
         check_valid_cube_name(args[1])?;
         self.cdll.point_to(args[1].to_string())?;
-        self.cdll.get_fusions_at_p()?;
+        self.cdll.get_fusions_at_p(w)?;
         Ok(())
     }
-    fn build_tree_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
+    fn build_tree_cmd(&mut self,args:&[&str],usage:&'static str,w:&mut dyn std::io::Write)->CSResult<()>{
         if args.len()!=2{
             return Err(CSError::InvalidArguments(usage))
         }
         check_valid_cube_name(args[1])?;
         self.cdll.point_to(args[1].to_string())?;
-        self.cdll.build_tree_at_p()?;
+        self.cdll.build_tree_at_p(w)?;
         Ok(())
     }
-    fn find_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
+    fn find_cmd(&mut self,args:&[&str],usage:&'static str,w:&mut dyn std::io::Write)->CSResult<()>{
         if args.len()!=3{
             return Err(CSError::InvalidArguments(usage))
         }
         check_valid_cube_name(args[2])?;
         let result=match args[1]{
             "starts_with"=>{ //to_lowercase to be case-insensitive
-                println!("Finding cube names starting with '{}'",args[2]);
+                writeln_wrapper!(w,"Finding cube names starting with '{}'",args[2]);
                 let result=self.cdll.hashmap.keys().filter(|&k|
                     k.to_lowercase().starts_with(&args[2].to_lowercase()))
                 .enumerate().fold(String::new(),|res,t|
@@ -305,7 +294,7 @@ impl TUI{
                 }else{"(None found)".to_string()}
             }
             "contains"=>{
-                println!("Finding cube names containing substring '{}'",args[2]);
+                writeln_wrapper!(w,"Finding cube names containing substring '{}'",args[2]);
                 let result=self.cdll.hashmap.keys().filter(|&k|
                     k.to_lowercase().contains(&args[2].to_lowercase()))
                 .enumerate().fold(String::new(),|res,t|
@@ -317,17 +306,17 @@ impl TUI{
             }
             _=>return Err(CSError::InvalidArguments(usage))
         };
-        println!("{result}");
+        writeln_wrapper!(w,"{result}");
         Ok(())
     }
-    fn todo_cmd(&mut self,_:&[&str],_:&'static str)->CSResult<()>{
-        self.cdll.print_todo();
+    fn todo_cmd(&mut self,_:&[&str],_:&'static str,w:&mut dyn std::io::Write)->CSResult<()>{
+        self.cdll.print_todo(w)?;
         Ok(())
     }
-    fn yn_loop(&self,msg:String)->Result<bool,CSError>{
+    fn yn_loop(&self,msg:String,w:&mut dyn std::io::Write)->CSResult<bool>{
         use std::io::Write;
         loop{
-            print!("{msg}\nContinue (y/n)? (n default)\n> ");
+            write_wrapper!(w,"{msg}\nContinue (y/n)? (n default)\n> ");
             return_if_error!{std::io::stdout().flush()}
             let mut buf=String::new();
             return_if_error!{std::io::stdin().read_line(&mut buf)}
@@ -336,7 +325,7 @@ impl TUI{
             if args[0]=="y"{ return Ok(true) }else if args[0]=="n"{ return Ok(false) }
         }
     }
-    fn save_to_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
+    fn save_to_cmd(&mut self,args:&[&str],usage:&'static str,w:&mut dyn std::io::Write)->CSResult<()>{
         if args.len()!=2{
             return Err(CSError::InvalidArguments(usage))
         }
@@ -345,7 +334,7 @@ impl TUI{
         }
         use std::fs::File;
         use std::io::Write;
-        if !self.yn_loop(format!("Writing to this file name, \"{}\", will be overwritten.",args[1]))?{
+        if !self.yn_loop(format!("Writing to this file name, \"{}\", will be overwritten.",args[1]),w)?{
             return Ok(())
         };
         let mut to_file={ match File::create(args[1]){ Ok(file)=>file, Err(e)=>return ErrToCSErr!(e) } };
@@ -368,14 +357,14 @@ impl TUI{
         }
         Ok(())
     }
-    fn load_from_cmd(&mut self,args:&[&str],usage:&'static str)->CSResult<()>{
+    fn load_from_cmd(&mut self,args:&[&str],usage:&'static str,w:&mut dyn std::io::Write)->CSResult<()>{
         if args.len()!=2{
             return Err(CSError::InvalidArguments(usage))
         }
         use std::fs::File;
         use std::io::BufReader;
         let from_file={ match File::open(args[1]){ Ok(file)=>file, Err(e)=>return ErrToCSErr!(e) } };
-        if !self.yn_loop(format!("All unsaved cube data in this program will be erased before loading this file {}.",args[1]))?{
+        if !self.yn_loop(format!("All unsaved cube data in this program will be erased before loading this file {}.",args[1]),w)?{
             return Ok(())
         };
         let mut bufread=BufReader::new(from_file);
@@ -395,7 +384,7 @@ impl TUI{
             let Some(tier_str)=cube_str[1].strip_suffix(';') else{ return Err(CSError::ParseError("TUI::read_to_file",format!("Line {i}: Missing semi-colon at field tier"))) };
             let tier={ match tier_str.parse::<i32>(){ Ok(tier)=>{ tier } Err(e)=> return ErrToCSErr!(e) } };
             self.cdll.add(super::CubeStruct::new(cube_name.to_string(),tier))?;
-            println!("Cube \"{}\" added",cube_name);
+            writeln_wrapper!(w,"Cube \"{}\" added",cube_name);
             let Some(valid_fcs)=cube_str[2].strip_suffix(';') else{ return Err(CSError::ParseError("TUI::read_to_file",format!("Line {i}: Missing semi-colon at field fused_by"))) };
             if valid_fcs.is_empty(){ continue }
             for fcs in valid_fcs.split(",").collect::<Box<_>>().iter(){
@@ -425,52 +414,52 @@ impl TUI{
             self.cdll.point_to(cube_name.to_string())?;
             match cube_2_opt{
                 Some(cube_2)=>{
-                    self.cdll.link_at_p_fb_pair(cube_1.to_string(),cube_2.to_string())?;
-                    println!("Successfully linked cube \"{cube_name}\" with pairs \"{cube_1}\" and \"{cube_2}\"");
+                    self.cdll.link_at_p_fb_pair(cube_1.to_string(),cube_2.to_string(),w)?;
+                    writeln_wrapper!(w,"Successfully linked cube \"{cube_name}\" with pairs \"{cube_1}\" and \"{cube_2}\"");
                 }
                 None=>{
                     let cube_noq=&cube_1[..cube_1.len()-1]; //Without question mark.
-                    self.cdll.link_at_p_fb_single(cube_noq.to_string())?;
-                    println!("Successfully linked cube \"{cube_name}\" with single \"{cube_noq}\"");
+                    self.cdll.link_at_p_fb_single(cube_noq.to_string(),w)?;
+                    writeln_wrapper!(w,"Successfully linked cube \"{cube_name}\" with single \"{cube_noq}\"");
                 }
             }
         }
-        println!("File successfully read.");
+        writeln_wrapper!(w,"File successfully read.");
         self.has_saved=true;
         Ok(())
     }
-    fn exit_cmd(&mut self,_:&[&str],_:&'static str)->CSResult<()>{
+    fn exit_cmd(&mut self,_:&[&str],_:&'static str,w:&mut dyn std::io::Write)->CSResult<()>{
         if !self.has_saved{
-            if !self.yn_loop(format!("There may be unsaved cube data not saved yet."))?{
+            if !self.yn_loop(format!("There may be unsaved cube data not saved yet."),w)?{
                 return Ok(())
             }
         }
         self.done_program=true;
         Ok(())
     }
-    fn usage_cmd(&mut self,_:&[&str],_:&'static str)->CSResult<()>{
-        println!("Format: <command arg1 arg2 ...>\n\
+    fn usage_cmd(&mut self,_:&[&str],_:&'static str,w:&mut dyn std::io::Write)->CSResult<()>{
+        writeln_wrapper!(w,"Format: <command arg1 arg2 ...>\n\
         + means more than 1 set of arguments can also be added\n\
         ? means that an argument is optional\n\
         Command may have more than 1 name delimited with |");
         let mut unique_usage_str=HashSet::<&str>::new(); //To only show usages of multiple same name commands once.
         let mut usage_str_box=self.hm_command.values().filter(|&&(_,s1,_)|unique_usage_str.insert(s1)).map(|&(_,s1,s2)|s1.to_string()+"\n\t"+s2).collect::<Box<_>>();
         usage_str_box.sort_unstable();
-        println!("{}",usage_str_box.iter().enumerate().fold(String::new(),|res,(u,s)|{
+        writeln_wrapper!(w,"{}",usage_str_box.iter().enumerate().fold(String::new(),|res,(u,s)|{
             res+s+if u!=usage_str_box.len()-1{"\n"}else{""}
         }));
         Ok(())
     }
-    fn not_found_cmd(&mut self,args:&[&str],_:&str)->CSResult<()>{
+    fn not_found_cmd(&mut self,args:&[&str],_:&str,_:&mut dyn std::io::Write)->CSResult<()>{
         Err(super::error::CSError::InvalidCommand(args[0].to_string()))
     }
     #[cfg(test)]
     fn test_multiple_commands(&mut self,args:Box<[Box<[&str]>]>)->CSResult<()>{
         for args in args.iter(){
             println!("\x1b[1mReading command {args:?}\x1b[0m");
-            let default_cmd=&(Self::not_found_cmd as commands::Commands,"","");
+            let default_cmd=&(Self::not_found_cmd as super::commands::Commands<Self>,"","");
             let command_unwrap_tup=self.hm_command.get(args[0]).unwrap_or(default_cmd);
-            if let Err(e)=command_unwrap_tup.0(self,&args,command_unwrap_tup.1){
+            if let Err(e)=command_unwrap_tup.0(self,&args,command_unwrap_tup.1,&mut std::io::stdout()){
                 return Err(e)
             }
         }
@@ -481,7 +470,7 @@ impl TUI{
 mod tests{
     #[test]
     fn link_test()->Result<(),super::CSError>{
-        let mut tui_obj=super::TUI::new();
+        let mut tui_obj:super::TUI=Default::default();
         let args=
         "add a 2 b 0 c 4 d 8\nread_all\n\
         link a with b c\nread_all\n\
@@ -492,7 +481,6 @@ mod tests{
         unlink c in a\nread_all\nexit"
             .split('\n').map(|command| command.split_whitespace().collect::<Box<_>>())
             .collect::<Box<_>>();
-        println!("a");
         tui_obj.test_multiple_commands(args)?;
         Ok(())
     }
