@@ -19,9 +19,10 @@ pub(crate) mod tui;
 mod error;
 pub mod fltk_ui;
 use std::{rc::Rc, cell::RefCell, collections::{HashMap, HashSet}, fmt::{Display, Formatter}, hash::Hash};
+use fltk_ui::app_utils::*;
 pub enum IOWrapper<'a>{
     Stdio(&'a mut std::io::Stdout,&'a mut std::io::Stdin),
-    FltkOutput(&'a mut fltk::output::MultilineOutput),
+    FltkOutput(&'a mut OutputContainer),
 }
 impl IOWrapper<'_>{
     fn write_output_nl(&mut self,output:String)->error::CSResult<()>{
@@ -34,10 +35,20 @@ impl IOWrapper<'_>{
                 return_if_std_error!(sout.write(output.as_bytes()));
                 return_if_std_error!(sout.flush());
             }
-            Self::FltkOutput(fout)=>{
+            Self::FltkOutput(oc)=>{
                 use fltk::prelude::*;
-                let old_value=fout.value();
-                fout.set_value(&(old_value+&output));
+                if let Some(ref mut oc_ow)=oc.ow{
+                    let OutputWidget::MLO(mlo)=oc_ow else{
+                        unreachable!("MultilineOutput should only output here.")
+                    };
+                    let old_value=mlo.value();
+                    mlo.set_value(&(old_value+&output));
+                    return Ok(())
+                }
+                let mut oc_ow=fltk::output::MultilineOutput::default();
+                let old_value=oc_ow.value();
+                oc_ow.set_value(&(old_value+&output));
+                oc.ow=Some(OutputWidget::MLO(oc_ow));
             }
         }
         Ok(())

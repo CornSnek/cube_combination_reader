@@ -2,7 +2,7 @@ mod cube;
 fn main(){
     let args=std::env::args().collect::<Box<_>>();
     let args_len@(2|3)=args.len() else{
-        eprintln!("Usage: (program name) terminal|gui (file_name)?");
+        eprintln!("Usage: (program name) terminal|gui (optional file_name)");
         std::process::exit(1)
     };
     match args[1].as_str(){
@@ -15,7 +15,7 @@ fn main(){
             app.gui_loop(if args_len==3{Some(args[2].clone())}else{None});
         }
         _=>{
-            eprintln!("Usage: First argument needs to be 'terminal' or 'gui'");
+            eprintln!("Usage: First argument needs to be 'terminal|gui'");
             std::process::exit(1)
         }
     }

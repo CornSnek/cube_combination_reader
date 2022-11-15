@@ -38,6 +38,23 @@ const TILE_SIZE:(i32,i32)=(WINDOW_SIZE.0,128);
 use cube_combination_reader::*;
 use fltk::prelude::WidgetExt;
 use super::tui::TUI;
+///Abstraction for output widgets in the gui for different commands.
+pub mod app_utils{
+    pub enum OutputWidget{ //Explicit because self.output_box.remove cannot use Box<dyn WidgetExt>.
+        MLO(fltk::output::MultilineOutput),
+        ///Will add more output widgets later.
+        #[allow(dead_code)] TempDummy
+    }
+    pub struct OutputContainer{
+        pub ow:Option<OutputWidget>,
+        pub scroll:fltk::group::Scroll,
+    }
+    impl Default for OutputContainer{
+        fn default()->Self{
+            Self{ow:Default::default(),scroll:Default::default()}
+        }
+    }
+}
 impl App{
     pub fn gui_loop(&mut self,file_opt:Option<String>){
         use std::collections::VecDeque;
@@ -77,32 +94,54 @@ impl App{
         self.window.add(&self.parse_tile);
         self.window.add(&self.output_box);
         self.window.show();
-        let mut output_widgets:VecDeque<Box<dyn WidgetExt>>=VecDeque::new();
+        use app_utils::*;
+        let mut output_widgets:VecDeque<OutputContainer>=VecDeque::new();
         let mut scroll_interpolate:i32=0;
         let mut do_scroll:bool=false;
         ///When adding/removing widgets.
-        fn rearrange_widgets(ow:&mut VecDeque<Box<dyn WidgetExt>>,scroll_interpolate:&mut i32,do_scroll:&mut bool){
+        fn rearrange_widgets(ow:&mut VecDeque<OutputContainer>,scroll_interpolate:&mut i32,do_scroll:&mut bool){
             let mut total_box_size:i32=0;
             for w in ow.iter_mut(){
-                w.set_pos(0,total_box_size);
-                total_box_size+=w.h();
+                w.scroll.set_pos(0,total_box_size);
+                match w.ow{
+                    Some(OutputWidget::MLO(ref mut mlo))=>{
+                        mlo.set_pos(0,total_box_size);
+                        total_box_size+=mlo.h();
+                    }
+                    _=>{}
+                }
             }
             *scroll_interpolate=total_box_size-WINDOW_SIZE.1+TILE_SIZE.1+12;
             *do_scroll=true;
         }
         let default_cmd=&(TUI::not_found_cmd as super::commands::Commands,"","");
         if let Some(file)=file_opt{
-            let mut output=fltk::output::MultilineOutput::new(0,0,0,0,"");
             let command_unwrap_tup=self.tui.hm_command.get("load_from").expect("Wrong command.");
+            let mut oc:OutputContainer=Default::default();
             if let Err(e)=command_unwrap_tup.0(&mut self.tui,&["",file.as_str()],""
-                ,&mut super::IOWrapper::FltkOutput(&mut output)){
-                    output.set_value(&format!("Error has occured: {e:?}: {e}\n"));
+                ,&mut super::IOWrapper::FltkOutput(&mut oc)){
+                    if let Some(OutputWidget::MLO(ref mut mlo))=oc.ow{
+                        mlo.set_value(&format!("Error has occured: {e:?}: {e}\n"));
+                    }if let None=oc.ow{
+                        let mut mlo=fltk::output::MultilineOutput::default();
+                        mlo.set_value(&format!("Error has occured: {e:?}: {e}\n"));
+                        oc.ow=Some(OutputWidget::MLO(mlo));
+                    }else{
+                        todo!("Remove other widgets.")
+                    }
             }
-            let value_ncount=output.value().chars().fold(0,|acc,ch|acc+if ch=='\n'{1}else{0});
-            output.set_size(WINDOW_SIZE.0,value_ncount*(output.text_size()+6)+output.text_size());
-            self.output_box.add(&output);
-            output_widgets.push_back(Box::new(output));
-            rearrange_widgets(&mut output_widgets,&mut scroll_interpolate, &mut do_scroll);
+            match oc.ow{
+                Some(OutputWidget::MLO(ref mut mlo))=>{
+                    let value_ncount=mlo.value().chars().fold(0,|acc,ch|acc+if ch=='\n'{1}else{0});
+                    oc.scroll.set_size(WINDOW_SIZE.0,value_ncount*(mlo.text_size()+6)+mlo.text_size());
+                    mlo.set_size(WINDOW_SIZE.0,value_ncount*(mlo.text_size()+6)+mlo.text_size());
+                    self.output_box.add(&oc.scroll);
+                    oc.scroll.add(mlo);
+                }
+                _=>{}
+            }
+            output_widgets.push_back(oc);
+            rearrange_widgets(&mut output_widgets,&mut scroll_interpolate,&mut do_scroll);
             self.output_box.redraw();
         }
         while self.app.wait(){
@@ -146,16 +185,41 @@ impl App{
                             if args.is_empty(){ continue }
                             let command_unwrap_tup=self.tui.hm_command.get(args[0]).unwrap_or(default_cmd);
                             let usage_str=command_unwrap_tup.1.to_string();
-                            let mut output=fltk::output::MultilineOutput::new(0,0,0,0,"");
+                            let mut oc:OutputContainer=Default::default();
                             if let Err(e)=command_unwrap_tup.0(&mut self.tui,&args,&usage_str
-                                ,&mut super::IOWrapper::FltkOutput(&mut output)){
-                                output.set_value(&format!("Error has occured: {e:?}: {e}\n"));
+                                ,&mut super::IOWrapper::FltkOutput(&mut oc)){
+                                    if let Some(OutputWidget::MLO(ref mut mlo))=oc.ow{
+                                        mlo.set_value(&format!("Error has occured: {e:?}: {e}\n"));
+                                    }if let None=oc.ow{
+                                        let mut mlo=fltk::output::MultilineOutput::default();
+                                        mlo.set_value(&format!("Error has occured: {e:?}: {e}\n"));
+                                        oc.ow=Some(OutputWidget::MLO(mlo));
+                                    }else{
+                                        todo!("Remove other widgets.")
+                                    }
                             }
-                            let value_ncount=output.value().chars().fold(0,|acc,ch|acc+if ch=='\n'{1}else{0});
-                            output.set_size(WINDOW_SIZE.0,value_ncount*(output.text_size()+6)+output.text_size());
-                            self.output_box.add(&output);
-                            output_widgets.push_back(Box::new(output));
-                            rearrange_widgets(&mut output_widgets,&mut scroll_interpolate, &mut do_scroll);
+                            match oc.ow{
+                                Some(OutputWidget::MLO(ref mut mlo))=>{
+                                    let value_ncount=mlo.value().chars().fold(0,|acc,ch|acc+if ch=='\n'{1}else{0});
+                                    oc.scroll.set_size(WINDOW_SIZE.0,value_ncount*(mlo.text_size()+6)+mlo.text_size());
+                                    mlo.set_size(WINDOW_SIZE.0,value_ncount*(mlo.text_size()+6)+mlo.text_size());
+                                    self.output_box.add(&oc.scroll);
+                                    oc.scroll.add(mlo);
+                                }
+                                _=>{}
+                            }
+                            output_widgets.push_back(oc);
+                            if output_widgets.len()>self.max_output_widgets{
+                                let mut w=output_widgets.pop_front().unwrap();
+                                match w.ow{
+                                    Some(OutputWidget::MLO(ref mlo))=>{
+                                        w.scroll.remove(mlo);
+                                    }
+                                    _=>{}
+                                }
+                                self.output_box.remove(&w.scroll);
+                            }
+                            rearrange_widgets(&mut output_widgets,&mut scroll_interpolate,&mut do_scroll);
                             self.tui.set_save_flag(args[0]);
                             if self.tui.is_program_done(){ break }
                         }
