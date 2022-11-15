@@ -7,17 +7,7 @@ macro_rules! SWF{
     (CT)=>{"ct:"};
     (Temp)=>{"temp.sav"};
 }
-macro_rules! writeln_wrapper{
-    ($($p:expr),*)=>{
-        return_if_error!(writeln!($($p),*))
-    }
-}
-macro_rules! write_wrapper{
-    ($($p:expr),*)=>{
-        return_if_error!(write!($($p),*))
-    }
-}
-macro_rules! return_if_error{
+macro_rules! return_if_std_error{
     ($p:expr)=>(if let Err(e)=$p{ return ErrToCSErr!(e) })
 }
 use error::CSError;
@@ -25,10 +15,57 @@ macro_rules! ErrToCSErr{
     ($e:tt)=>{ Err(CSError::OtherError(Box::new($e))) }
 }
 mod commands;
-mod tui;
+pub(crate) mod tui;
 mod error;
 pub mod fltk_ui;
 use std::{rc::Rc, cell::RefCell, collections::{HashMap, HashSet}, fmt::{Display, Formatter}, hash::Hash};
+pub enum IOWrapper<'a>{
+    Stdio(&'a mut std::io::Stdout,&'a mut std::io::Stdin),
+    FltkOutput(&'a mut fltk::output::MultilineOutput),
+}
+impl IOWrapper<'_>{
+    fn write_output_nl(&mut self,output:String)->error::CSResult<()>{
+        self.write_output(output+"\n")
+    }
+    fn write_output(&mut self,output:String)->error::CSResult<()>{
+        match self{
+            Self::Stdio(sout,_)=>{
+                use std::io::Write;
+                return_if_std_error!(sout.write(output.as_bytes()));
+                return_if_std_error!(sout.flush());
+            }
+            Self::FltkOutput(fout)=>{
+                use fltk::prelude::*;
+                let old_value=fout.value();
+                fout.set_value(&(old_value+&output));
+            }
+        }
+        Ok(())
+    }
+    fn read_yn(&mut self,prompt:String)->error::CSResult<bool>{
+        match self{
+            Self::Stdio(sout,sin)=>{
+                loop{
+                    use std::io::Write;
+                    return_if_std_error!(sout.write((prompt.clone()+"> ").as_bytes()));
+                    return_if_std_error!(sout.flush());
+                    let mut buf=String::new();
+                    return_if_std_error!{sin.read_line(&mut buf)}
+                    let args:Box<_>=buf.split_whitespace().collect();
+                    if args.is_empty(){ return Ok(false) }
+                    if args[0]=="y"{ return Ok(true) }else if args[0]=="n"{ return Ok(false) }
+                }
+            }
+            Self::FltkOutput(..)=>{
+                if let Some(choice)=fltk::dialog::choice2_default((prompt.clone()+"> ").as_str(),"Yes","No",""){
+                    Ok(if choice==1{ false }else{ true })
+                }else{
+                    Ok(false)
+                }
+            }
+        }
+    }
+}
 type Link=Rc<RefCell<CubeStruct>>;
 struct CubeStruct{
     name:String,
@@ -72,50 +109,50 @@ impl CubeStruct{
     fn new(name:String,tier:i32)->Self{
         Self{name,tier:tier.max(-1),converts_to:HashMap::new(),fused_by:HashMap::new()}
     }
-    fn add_to(&mut self,other:&Link,w:&mut dyn std::io::Write)->CSResult<()>{
+    fn add_to(&mut self,other:&Link,w:&mut IOWrapper)->CSResult<()>{
         let other_str=other.borrow().name.clone();
         if other_str=="?"{ return Ok(()) } //Don't populate with ? (Redundant).
         if self.converts_to.insert(other_str,other.clone()).is_some(){
-            writeln_wrapper!(w,"Cube \"{}\" has already been added for \"{}\" as a conversion",&other.borrow().name,self.name);
+            w.write_output_nl(format!("Cube \"{}\" has already been added for \"{}\" as a conversion",&other.borrow().name,self.name))?;
         };
         Ok(())
     }
-    fn remove_to_maybe(&mut self,other:&Link,w:&mut dyn std::io::Write)->CSResult<()>{
+    fn remove_to_maybe(&mut self,other:&Link,w:&mut IOWrapper)->CSResult<()>{
         if other.borrow().fused_by.keys().any(|fuse_key| fuse_key.contains_key(&self.name)){
-            writeln_wrapper!(w,"Cube \"{}\" cannot be removed for \"{}\" as a conversion (Contains other keys)",&other.borrow().name,self.name);
+            w.write_output_nl(format!("Cube \"{}\" cannot be removed for \"{}\" as a conversion (Contains other keys)",&other.borrow().name,self.name))?;
         }else if self.converts_to.remove(&other.borrow().name).is_none(){
-            writeln_wrapper!(w,"Cube \"{}\" has already been removed for \"{}\" as a conversion",&other.borrow().name,self.name);
+            w.write_output_nl(format!("Cube \"{}\" has already been removed for \"{}\" as a conversion",&other.borrow().name,self.name))?;
         }
         Ok(())
     }
-    fn add_fb_pair(&mut self,other:&Link,other2:&Link,w:&mut dyn std::io::Write)->CSResult<()>{
+    fn add_fb_pair(&mut self,other:&Link,other2:&Link,w:&mut IOWrapper)->CSResult<()>{
         let key=FuseKey::new_pair(&other.borrow().name,&other2.borrow().name);
         if self.fused_by.insert(key,[other.clone(),other2.clone()]).is_some(){
-            writeln_wrapper!(w,"Cubes \"{}\" and \"{}\" have already been added as a key to \"{}\"",&other.borrow().name,&other2.borrow().name,self.name);
+            w.write_output_nl(format!("Cubes \"{}\" and \"{}\" have already been added as a key to \"{}\"",&other.borrow().name,&other2.borrow().name,self.name))?;
         };
         Ok(())
     }
-    fn add_fb_single(&mut self,other:&Link,w:&mut dyn std::io::Write)->CSResult<()>{
+    fn add_fb_single(&mut self,other:&Link,w:&mut IOWrapper)->CSResult<()>{
         let key=FuseKey::new_single(&other.borrow().name);
         if self.fused_by.insert(key,[other.clone(),other.clone()]).is_some(){ //Make it so that the array returns the same Rc twice for single FuseKeys
-            writeln_wrapper!(w,"Cube \"{}\" has already been added as a key to \"{}\"",&other.borrow().name,self.name);
+            w.write_output_nl(format!("Cube \"{}\" has already been added as a key to \"{}\"",&other.borrow().name,self.name))?;
         }
         Ok(())
     }
-    fn remove_fb_key(&mut self,key:FuseKey,w:&mut dyn std::io::Write)->CSResult<()>{
+    fn remove_fb_key(&mut self,key:FuseKey,w:&mut IOWrapper)->CSResult<()>{
         if self.fused_by.remove(&key).is_some(){
-            writeln_wrapper!(w,"Fuse key has been deleted for cube {}",self.name);
+            w.write_output_nl(format!("Fuse key has been deleted for cube {}",self.name))?;
         }else{
-            writeln_wrapper!(w,"Fuse key has already been deleted for cube {}",self.name);
+            w.write_output_nl(format!("Fuse key has already been deleted for cube {}",self.name))?;
         }
         Ok(())
     }
-    fn merge_single_keys(&mut self,l1:&Link,l2:&Link,w:&mut dyn std::io::Write)->CSResult<()>{
+    fn merge_single_keys(&mut self,l1:&Link,l2:&Link,w:&mut IOWrapper)->CSResult<()>{
         let (n1,n2)=(&l1.borrow().name,&l2.borrow().name);
         self.fused_by.remove(&FuseKey::new_single(n1));
         self.fused_by.remove(&FuseKey::new_single(n2));
         if self.fused_by.insert(FuseKey::new_pair(n1,n2),[l1.clone(),l2.clone()]).is_some() {
-            writeln_wrapper!(w,"Cubes \"{}\" and \"{}\" have already been added as a key to \"{}\"",&l1.borrow().name,&l2.borrow().name,self.name);
+            w.write_output_nl(format!("Cubes \"{}\" and \"{}\" have already been added as a key to \"{}\"",&l1.borrow().name,&l2.borrow().name,self.name))?;
         };
         Ok(())
     }
@@ -235,7 +272,7 @@ impl CubeDLL{
         self.hashmap.clear();
         self.pointer=None;
     }
-    fn link_at_p_fb_pair(&self,cs_n1:String,cs_n2:String,w:&mut dyn std::io::Write)->CSResult<()>{
+    fn link_at_p_fb_pair(&self,cs_n1:String,cs_n2:String,w:&mut IOWrapper)->CSResult<()>{
         let Some(csl1)=self.hashmap.get(&cs_n1) else{
             return Err(error::CSError::NonExistentName("CubeDLL::link_at_p_fb_pair",cs_n1.clone()))
         };
@@ -250,14 +287,14 @@ impl CubeDLL{
             let cmp_key=FuseKey::new_pair(&csl1.borrow().name,&csl2.borrow().name);
             if csl_p.borrow().name!="?"{
                 if qcsl.borrow_mut().fused_by.remove(&cmp_key).is_some(){
-                    writeln_wrapper!(w,"Cube FuseKey \"{cmp_key}\" has been removed for ?");
+                    w.write_output_nl(format!("Cube FuseKey \"{cmp_key}\" has been removed for ?"))?;
                 }
             }else{
                 let mut key_exists=false;
                 'found_key: for csl in self.hashmap.values(){
                     for fuse_key in csl.borrow().fused_by.keys(){
                         if fuse_key==&cmp_key{
-                            writeln_wrapper!(w,"Cube FuseKey \"{cmp_key}\" cannot be added for ? as it already exists as known.");
+                            w.write_output_nl(format!("Cube FuseKey \"{cmp_key}\" cannot be added for ? as it already exists as known."))?;
                             key_exists=true;
                             break 'found_key
                         }
@@ -272,7 +309,7 @@ impl CubeDLL{
         csl2.borrow_mut().add_to(&csl_p,w)?;
         Ok(())
     }
-    fn link_at_p_fb_single(&self,cs_n:String,w:&mut dyn std::io::Write)->CSResult<()>{
+    fn link_at_p_fb_single(&self,cs_n:String,w:&mut IOWrapper)->CSResult<()>{
         let Some(csl)=self.hashmap.get(&cs_n) else{
             return Err(error::CSError::NonExistentName("CubeDLL::link_at_p_fb_single",cs_n.clone()))
         };
@@ -284,14 +321,14 @@ impl CubeDLL{
             let cmp_key=FuseKey::new_single(&csl.borrow().name);
             if csl_p.borrow().name!="?"{
                 if qcsl.borrow_mut().fused_by.remove(&cmp_key).is_some(){
-                    writeln_wrapper!(w,"Cube FuseKey \"{cmp_key}\" has been removed for ?");
+                    w.write_output_nl(format!("Cube FuseKey \"{cmp_key}\" has been removed for ?"))?;
                 }
             }else{
                 let mut key_exists=false;
                 'found_key: for csl in self.hashmap.values(){
                     for fuse_key in csl.borrow().fused_by.keys(){
                         if fuse_key==&cmp_key{
-                            writeln_wrapper!(w,"Cube FuseKey \"{cmp_key}\" cannot be added for ? as it already exists as known.");
+                            w.write_output_nl(format!("Cube FuseKey \"{cmp_key}\" cannot be added for ? as it already exists as known."))?;
                             key_exists=true;
                             break 'found_key
                         }
@@ -309,7 +346,7 @@ impl CubeDLL{
         csl_p.borrow_mut().fused_by.clear();
         Ok(())
     }
-    fn unlink_at_p_fb_keys(&self,cs_n1:String,cs_opt:Option<String>,w:&mut dyn std::io::Write)->CSResult<()>{
+    fn unlink_at_p_fb_keys(&self,cs_n1:String,cs_opt:Option<String>,w:&mut IOWrapper)->CSResult<()>{
         let Some(csl_p)=&self.pointer else{ return Err(error::CSError::NullPointer("CubeDLL::unlink_at_p_fb_keys")) };
         let Some(csl1)=self.hashmap.get(&cs_n1) else{
             return Err(error::CSError::NonExistentName("CubeDLL::unlink_at_p_fused_by",cs_n1.clone()))
@@ -340,14 +377,14 @@ impl CubeDLL{
         Ok(())
     }
     ///Remove all references of this CubeStruct at pointer including the pointer as well.
-    fn destroy_at_p(&mut self,w:&mut dyn std::io::Write)->CSResult<()>{
+    fn destroy_at_p(&mut self,w:&mut IOWrapper)->CSResult<()>{
         let Some(csl)=self.pointer.take() else{ return Err(error::CSError::NullPointer("CubeDLL::destroy_at_p")) };
         let mut cs=csl.borrow_mut();
         let cs_name=cs.name.clone();
         for cs_fbs in cs.fused_by.values(){
             cs_fbs[0].borrow_mut().converts_to.remove(&cs_name);
             cs_fbs[1].borrow_mut().converts_to.remove(&cs_name);
-            writeln_wrapper!(w,"Removing \"{}\" from cubes \"{}\" and \"{}\"",cs_name,cs_fbs[0].borrow().name,cs_fbs[1].borrow().name);
+            w.write_output_nl(format!("Removing \"{}\" from cubes \"{}\" and \"{}\"",cs_name,cs_fbs[0].borrow().name,cs_fbs[1].borrow().name))?;
         }
         cs.fused_by.clear();
         for cs_ct in cs.converts_to.values(){
@@ -357,10 +394,10 @@ impl CubeDLL{
                 if fuse_k.contains_key(&cs_name){
                     match fuse_k{
                         FuseKey::Pair(k0,k1)=>{
-                            writeln_wrapper!(w,"Removing fuse key pair {{\"{}\",\"{}\"}} for \"{}\"",k0,k1,cs_ct_bm.name);
+                            w.write_output_nl(format!("Removing fuse key pair {{\"{}\",\"{}\"}} for \"{}\"",k0,k1,cs_ct_bm.name))?;
                         }
                         FuseKey::Single(k0)=>{
-                            writeln_wrapper!(w,"Removing fuse key {{\"{}\"}} for \"{}\"",k0,cs_ct_bm.name);
+                            w.write_output_nl(format!("Removing fuse key {{\"{}\"}} for \"{}\"",k0,cs_ct_bm.name))?;
                         }
                     }
                     keys_to_delete.push(fuse_k.clone());
@@ -372,7 +409,7 @@ impl CubeDLL{
         self.hashmap.remove(&cs_name);
         Ok(())
     }
-    fn rename_at_p(&mut self,to_name:String,w:&mut dyn std::io::Write)->CSResult<()>{
+    fn rename_at_p(&mut self,to_name:String,w:&mut IOWrapper)->CSResult<()>{
         let None=self.hashmap.get(&to_name) else{ return Err(error::CSError::DuplicateName("CubeDLL::rename_at_p",to_name)) };
         let Some(csl)=&self.pointer else{ return Err(error::CSError::NullPointer("CubeDLL::rename_at_p")) };
         let mut cs=csl.borrow_mut();
@@ -389,7 +426,7 @@ impl CubeDLL{
                 };
                 cs_fbs[1].borrow_mut().converts_to.insert(to_name.clone(),v1);
             }
-            writeln_wrapper!(w,"Changing key name of \"{cs_old_name}\" to \"{to_name}\" for \"{}\" and \"{}\"",cs_fbs[0].borrow().name,cs_fbs[1].borrow().name);
+            w.write_output_nl(format!("Changing key name of \"{cs_old_name}\" to \"{to_name}\" for \"{}\" and \"{}\"",cs_fbs[0].borrow().name,cs_fbs[1].borrow().name))?;
         }
         for cs_ct in cs.converts_to.values(){
             let mut cs_ct_bm=cs_ct.borrow_mut();
@@ -397,7 +434,7 @@ impl CubeDLL{
             for fuse_k in cs_ct_bm.fused_by.keys(){
                 if fuse_k.contains_key(&cs_old_name){
                     keys_to_change.push(fuse_k.clone()); //To extract value from old key to replace with new.
-                    writeln_wrapper!(w,"Changing key names of \"{cs_old_name}\" to \"{to_name}\" for cube \"{}\"",cs_ct_bm.name);
+                    w.write_output_nl(format!("Changing key names of \"{cs_old_name}\" to \"{to_name}\" for cube \"{}\"",cs_ct_bm.name))?;
                 }
             }
             for fuse_k_old in keys_to_change.iter(){
@@ -413,18 +450,18 @@ impl CubeDLL{
         self.hashmap.insert(to_name,v);
         Ok(())
     }
-    fn get_info_p(&self,w:&mut dyn std::io::Write)->CSResult<()>{
+    fn get_info_p(&self,w:&mut IOWrapper)->CSResult<()>{
         if let Some(csl)=&self.pointer{
-            writeln_wrapper!(w,"Info of cube pointer: {}",csl.borrow());
+            w.write_output_nl(format!("Info of cube pointer: {}",csl.borrow()))?;
             for key in csl.borrow().converts_to.keys(){
                 let csl=self.hashmap.get(key).unwrap();
-                writeln_wrapper!(w,"Associated fusions: {}",csl.borrow());
+                w.write_output_nl(format!("Associated fusions: {}",csl.borrow()))?;
             }
             Ok(())
         }else{ unreachable!("Shouldn't be accessed. Should use point_to()") }
     }
-    fn get_info_cube_paths(&self,w:&mut dyn std::io::Write)->CSResult<()>{
-        writeln_wrapper!(w,"Syntax: fused_by: [fuse key array (single/pair)] => [[this cube name]](tier) => converts_to: [cube name array]");
+    fn get_info_cube_paths(&self,w:&mut IOWrapper)->CSResult<()>{
+        w.write_output_nl(format!("Syntax: fused_by: [fuse key array (single/pair)] => [[this cube name]](tier) => converts_to: [cube name array]"))?;
         for csl in self.hashmap.values(){
             let cs=csl.borrow();
             let mut cs_str=String::new();
@@ -459,17 +496,17 @@ impl CubeDLL{
                 if i!=cs.converts_to.len()-1{ cs_str.push(','); }
             }
             cs_str.push(']');
-            writeln_wrapper!(w,"{cs_str}");
+            w.write_output_nl(format!("{cs_str}"))?;
         }
         Ok(())
     }
-    fn change_tier_at_p(&self,to_this_tier:i32,w:&mut dyn std::io::Write)->CSResult<()>{
+    fn change_tier_at_p(&self,to_this_tier:i32,w:&mut IOWrapper)->CSResult<()>{
         let Some(csl_p)=&self.pointer else {return Err(error::CSError::NullPointer("CubeDLL::change_tier_at_p")) };
-        if to_this_tier < -1{ writeln_wrapper!(w,"Tier changed to -1 instead of {to_this_tier}") }
+        if to_this_tier < -1{ w.write_output_nl(format!("Tier changed to -1 instead of {to_this_tier}"))?; }
         csl_p.borrow_mut().tier=to_this_tier.max(-1);
         Ok(())
     }
-    fn merge_keys_at_p(&self,cs_n1:String,cs_n2:String,w:&mut dyn std::io::Write)->CSResult<()>{
+    fn merge_keys_at_p(&self,cs_n1:String,cs_n2:String,w:&mut IOWrapper)->CSResult<()>{
         let Some(csl_p)=&self.pointer else {return Err(error::CSError::NullPointer("CubeDLL::change_tier_at_p")) };
         let Some(csl1)=self.hashmap.get(&cs_n1) else{
             return Err(error::CSError::NonExistentName("CubeDLL::merge_keys_at_p",cs_n1.clone()))
@@ -487,7 +524,7 @@ impl CubeDLL{
             }
         }
     }
-    fn get_fusions_at_p(&self,w:&mut dyn std::io::Write)->CSResult<()>{
+    fn get_fusions_at_p(&self,w:&mut IOWrapper)->CSResult<()>{
         let Some(csl_p)=&self.pointer else {return Err(error::CSError::NullPointer("CubeDLL::change_tier_at_p")) };
         let str_cs=&csl_p.borrow().name;
         let mut count:usize=1;
@@ -495,22 +532,22 @@ impl CubeDLL{
             let csl_other_str=&csl_other.borrow().name;
             for fuse_key in csl_other.borrow().fused_by.keys(){
                 if fuse_key.contains_key(str_cs){
-                    writeln_wrapper!(w,"{count}: {csl_other_str} made with {fuse_key}");
+                    w.write_output_nl(format!("{count}: {csl_other_str} made with {fuse_key}"))?;
                     count+=1;
                 }
             }
         }
         Ok(())
     }
-    fn build_tree_at_p(&self,w:&mut dyn std::io::Write)->CSResult<()>{
+    fn build_tree_at_p(&self,w:&mut IOWrapper)->CSResult<()>{
         let mut hm_visited:HashSet<String>=HashSet::new();
         let Some(csl_p)=&self.pointer else {return Err(error::CSError::NullPointer("CubeDLL::change_tier_at_p")) };
         let cs_str=csl_p.borrow().name.clone();
-        writeln_wrapper!(w,"Getting Combinations to get {}",cs_str);
+        w.write_output_nl(format!("Getting Combinations to get {}",cs_str))?;
         let mut build_str:Vec<(usize,String)>=Vec::new();
         self.build_tree_recurse(cs_str,&mut hm_visited,0,&mut build_str);
         build_str.sort_unstable(); //Print sorted by build_tier.
-        writeln_wrapper!(w,"{}",build_str.into_iter().map(|i|i.1).collect::<Box<_>>().concat());
+        w.write_output_nl(format!("{}",build_str.into_iter().map(|i|i.1).collect::<Box<_>>().concat()))?;
         Ok(())
     }
     ///Recursion over CubeStruct Links to get Cube Combinations for a single Cube. Asserting that the visit_str exists.
@@ -532,29 +569,29 @@ impl CubeDLL{
             }
         }
     }
-    fn print_todo(&self,w:&mut dyn std::io::Write)->CSResult<()>{
+    fn print_todo(&self,w:&mut IOWrapper)->CSResult<()>{
         for (str,csl) in self.hashmap.iter(){
             if str!="?"{
                 let cs=csl.borrow();
                 if cs.tier==-1{
-                    writeln_wrapper!(w,"{str} cube has tier -1");
+                    w.write_output_nl(format!("{str} cube has tier -1"))?;
                 }
                 if cs.fused_by.is_empty()&&cs.converts_to.is_empty(){
-                    writeln_wrapper!(w,"{str} cube is an orphan (No links added)")
+                    w.write_output_nl(format!("{str} cube is an orphan (No links added)"))?;
                 }
                 for fuse_key in cs.fused_by.keys(){
                     if let &FuseKey::Single(_)=fuse_key{
-                        writeln_wrapper!(w,"{str} contains a single fuse key {fuse_key}");
+                        w.write_output_nl(format!("{str} contains a single fuse key {fuse_key}"))?;
                     }
                 }
             }
         }
         if let Some(qcsl)=self.hashmap.get("?"){
-            writeln_wrapper!(w,"Printing fusion keys to unknown '?' Cubes");
+            w.write_output_nl(format!("Printing fusion keys to unknown '?' Cubes"))?;
             for fuse_key in qcsl.borrow().fused_by.keys(){
-                write_wrapper!(w,"{}, ",fuse_key);
+                w.write_output(format!("{}, ",fuse_key))?;
             }
-            writeln_wrapper!(w,"\n");
+            w.write_output_nl(format!("\n"))?;
         }
         Ok(())
     }

@@ -17,7 +17,7 @@
 				"$rustc"
 			],
 			"args": [
-				"--release"
+				"-r","gui",
 			],
 			"label": "rust: cargo run",
 			"group": {

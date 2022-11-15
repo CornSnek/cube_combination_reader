@@ -6,7 +6,7 @@ pub enum CSError{
     NonExistentName(&'static str,String),
     NullPointer(&'static str),
     SameStruct(&'static str,String),
-    InvalidArguments(&'static str),
+    InvalidArguments(String),
     DuplicateName(&'static str,String),
     ParseError(&'static str,String),
     EmptyValue(&'static str,String),
