@@ -36,7 +36,7 @@ pub fn get_commands_hashmap()->super::commands::CommandHashMap<'static>{
     cmd_hm.insert("usage",(TUI::usage_cmd,"<usage>","Sees all commands used within the program"));
     cmd_hm
 }
-impl TUI{ ///For the hashmap above, set the appropriate save flags when quitting the program.
+impl TUI{ ///For the commands in get_commands_hashmap(), set the appropriate save flags when quitting the program.
     pub fn set_save_flag(&mut self,arg:&str){
         match arg{
             "destroy_all"|"drop_all"|"remove_all"|"save_to"|"write_to"|"load_from"| //These 6 implicitly do self.has_saved if y is entered.
@@ -80,7 +80,17 @@ impl Default for TUI{
 }
 ///All functions ending in _cmd is for a hashmap.
 impl TUI{
-    pub fn terminal_loop(&mut self){
+    pub fn is_program_done(&self)->bool{
+        self.done_program
+    }
+    pub fn terminal_loop(&mut self,file_opt:Option<String>){
+        if let Some(file)=file_opt{
+            let command_unwrap_tup=self.hm_command.get("load_from").expect("Wrong command.");
+            if let Err(e)=command_unwrap_tup.0(self,&["",file.as_str()],""
+                ,&mut IOWrapper::Stdio(&mut std::io::stdout(),&mut std::io::stdin())){
+                do_print_error!("Error has occured: {e:?}: {e}");
+            }
+        }
         let mut rl=Editor::<()>::new().expect("Unable to setup program loop.");
         rl.set_max_history_size(100);
         if rl.load_history("cmd_history.txt").is_err(){ println!("Commands not saved yet.") }
@@ -93,6 +103,7 @@ impl TUI{
                     rl.add_history_entry(line.as_str());
                     let args:Box<_>=line.split_whitespace().collect();
                     let default_cmd=&(Self::not_found_cmd as super::commands::Commands,"","");
+                    if args.is_empty(){ continue }
                     let command_unwrap_tup=self.hm_command.get(args[0]).unwrap_or(default_cmd);
                     if let Err(e)=command_unwrap_tup.0(self,&args,command_unwrap_tup.1,
                         &mut IOWrapper::Stdio(&mut std::io::stdout(),&mut std::io::stdin())){
@@ -362,9 +373,11 @@ impl TUI{
         use std::fs::File;
         use std::io::BufReader;
         let from_file={ match File::open(args[1]){ Ok(file)=>file, Err(e)=>return ErrToCSErr!(e) } };
-        if !self.yn_loop(format!("All unsaved cube data in this program will be erased before loading this file {}.",args[1]),w)?{
-            return Ok(())
-        };
+        if !self.has_saved{ //No prompt if no unsaved data.
+            if !self.yn_loop(format!("All unsaved cube data in this program will be erased before loading this file {}.",args[1]),w)?{
+                return Ok(())
+            };
+        }
         let mut bufread=BufReader::new(from_file);
         let mut str=String::new();
         return_if_std_error!{bufread.read_to_string(&mut str)}
@@ -448,6 +461,11 @@ impl TUI{
         })))?;
         Ok(())
     }
+    pub fn current_cube_keys(&self)->Box<[&String]>{
+        let mut keys=self.cdll.hashmap.keys().collect::<Box<_>>();
+        keys.sort_unstable();
+        keys
+    }
     pub fn not_found_cmd(&mut self,args:&[&str],_:&str,_:&mut IOWrapper)->CSResult<()>{
         Err(super::error::CSError::InvalidCommand(args[0].to_string()))
     }
@@ -456,6 +474,7 @@ impl TUI{
         for args in args.iter(){
             println!("\x1b[1mReading command {args:?}\x1b[0m");
             let default_cmd=&(Self::not_found_cmd as super::commands::Commands,"","");
+            if args.is_empty(){ continue }
             let command_unwrap_tup=self.hm_command.get(args[0]).unwrap_or(default_cmd);
             if let Err(e)=command_unwrap_tup.0(self
                 ,&args,command_unwrap_tup.1,&mut IOWrapper::Stdio(&mut std::io::stdout(),&mut std::io::stdin())){

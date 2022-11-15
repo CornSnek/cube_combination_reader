@@ -222,11 +222,13 @@ impl Display for CubeStruct{
     }
 }
 /*
-impl Drop for CubeStruct{ //Printing drop for debugging.
+impl Drop for CubeStruct{
+    ///Printing drop for debugging.
     fn drop(&mut self){
         println!("Dropped CubeStruct \"{}\"",self.name);
     }
-}*/
+}
+*/
 use error::CSResult;
 struct CubeDLL{
     pointer:Option<Link>,

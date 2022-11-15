@@ -1,18 +1,18 @@
 mod cube;
 fn main(){
     let args=std::env::args().collect::<Box<_>>();
-    if args.len()==1{
-        eprintln!("Usage: To start the program, type 'terminal' or 'gui' after the program.");
+    let args_len@(2|3)=args.len() else{
+        eprintln!("Usage: (program name) terminal|gui (file_name)?");
         std::process::exit(1)
-    }
+    };
     match args[1].as_str(){
         "terminal"=>{
             let mut tui:cube::tui::TUI=Default::default();
-            tui.terminal_loop();
+            tui.terminal_loop(if args_len==3{Some(args[2].clone())}else{None});
         }
         "gui"=>{
             let mut app:cube::fltk_ui::App=Default::default();
-            app.run();
+            app.gui_loop(if args_len==3{Some(args[2].clone())}else{None});
         }
         _=>{
             eprintln!("Usage: First argument needs to be 'terminal' or 'gui'");
