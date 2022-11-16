@@ -461,10 +461,25 @@ impl TUI{
         })))?;
         Ok(())
     }
-    pub fn current_cube_keys(&self)->Box<[&String]>{
-        let mut keys=self.cdll.hashmap.keys().collect::<Box<_>>();
+    pub fn cube_keys(&self,filter_opt:Option<String>)->Box<[&String]>{
+        let mut keys=self.cdll.hashmap.keys().filter(|s|{
+            if let Some(filter_str)=&filter_opt{
+                s.to_lowercase().contains(&filter_str.to_lowercase())
+            }else{
+                true
+            }
+        }).collect::<Box<_>>();
         keys.sort_unstable();
         keys
+    }
+    pub fn cube_count(&self,filter_opt:Option<String>)->usize{
+        self.cdll.hashmap.keys().filter(|s|{
+            if let Some(filter_str)=&filter_opt{
+                s.to_lowercase().contains(&filter_str.to_lowercase())
+            }else{
+                true
+            }
+        }).count()
     }
     pub fn not_found_cmd(&mut self,args:&[&str],_:&str,_:&mut IOWrapper)->CSResult<()>{
         Err(super::error::CSError::InvalidCommand(args[0].to_string()))
