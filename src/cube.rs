@@ -18,7 +18,7 @@ mod commands;
 pub(crate) mod tui;
 mod error;
 pub mod fltk_ui;
-use std::{rc::Rc, cell::RefCell, collections::{HashMap, HashSet}, fmt::{Display, Formatter}, hash::Hash};
+use std::{rc::Rc, cell::RefCell, collections::HashMap, fmt::{Display, Formatter}, hash::Hash};
 use fltk_ui::app_utils::*;
 pub enum IOWrapper<'a>{
     Stdio(&'a mut std::io::Stdout,&'a mut std::io::Stdin),
@@ -552,31 +552,114 @@ impl CubeDLL{
         }
         Ok(())
     }
-    fn build_tree_at_p(&self,w:&mut IOWrapper)->CSResult<()>{
-        let mut hm_visited:HashSet<String>=HashSet::new();
-        let Some(csl_p)=&self.pointer else {return Err(error::CSError::NullPointer("CubeDLL::change_tier_at_p")) };
-        let cs_str=csl_p.borrow().name.clone();
-        w.write_output_nl(format!("Getting Combinations to get {}",cs_str))?;
-        let mut build_str:Vec<(usize,String)>=Vec::new();
-        self.build_tree_recurse(cs_str,&mut hm_visited,0,&mut build_str);
-        build_str.sort_unstable(); //Print sorted by build_tier.
-        w.write_output_nl(format!("{}",build_str.into_iter().map(|i|i.1).collect::<Box<_>>().concat()))?;
-        Ok(())
+}
+mod bt{
+    use super::FuseKey;
+    use super::IOWrapper;
+    use super::error::CSResult;
+    use std::collections::{HashMap, HashSet};
+    #[derive(Default)]
+    pub struct BuildTreeNode{
+        parent:Option<String>,
+        cubes:HashMap<String,Vec<FuseKey>>
     }
-    ///Recursion over CubeStruct Links to get Cube Combinations for a single Cube. Asserting that the visit_str exists.
-    fn build_tree_recurse(&self,visit_str:String,hm_visited:&mut HashSet<String>,build_tier:usize,build_str:&mut Vec<(usize,String)>){
-        if hm_visited.get(&visit_str).is_none(){
-            hm_visited.insert(visit_str.clone());
-            let cs=self.hashmap.get(&visit_str).unwrap().borrow();
-            for fuse_key in cs.fused_by.keys(){
-                build_str.push((build_tier,format!("{build_tier}: {visit_str} made with {fuse_key}\n")));
+    impl BuildTreeNode{
+        ///Returns false if already added and visited. Adds parent as the first string.
+        pub(super) fn add_cube(&mut self,cube:&String)->bool{
+            if let None=self.parent{ self.parent=Some(cube.clone()); }
+            if self.cubes.get(cube).is_some(){ false }else{
+                self.cubes.insert(cube.clone(),Default::default());
+                true
+            }
+        }
+        pub(super) fn add_fuse_key(&mut self,cube:&String,fuse_key:&FuseKey){
+            if let Some(bt)=self.cubes.get_mut(cube){
+                bt.push(fuse_key.clone());
+            }else{ unreachable!(concat!("Shouldn't be here at ",line!())) }
+        }
+        pub(super) fn print_simple(&self,w:&mut IOWrapper)->CSResult<()>{
+            let Some(ref parent_str)=self.parent else{ unreachable!(concat!("Shouldn't be here at ",line!())) };
+            let mut visit_hs=HashSet::<String>::new();
+            let mut build_vec=Vec::<(usize,Vec<String>)>::new();
+            self.print_simple_recurse(&mut build_vec,0,parent_str,&mut visit_hs);
+            build_vec.sort_by(|lhs,rhs|lhs.0.cmp(&rhs.0));
+            w.write_output(build_vec.iter().map(|(tier,str_v)|format!("[{tier}] => {}\n",str_v.concat())).collect::<Box<_>>().concat())?;
+            Ok(())
+        }
+        fn print_simple_recurse(&self,build_vec:&mut Vec<(usize,Vec<String>)>,sort_tier:usize,visit_str:&String,visit_hs:&mut HashSet::<String>){
+            if !visit_hs.insert(visit_str.clone()){ return }
+            let Some(vec_fuse_keys)=self.cubes.get(visit_str) else{ return };
+            build_vec.push((sort_tier,vec![visit_str.to_owned()]));
+            let this_i=build_vec.len()-1;
+            if !vec_fuse_keys.is_empty(){ build_vec[this_i].1.push(" => ".to_owned()); }
+            for (i,fuse_key) in vec_fuse_keys.iter().enumerate(){
+                build_vec[this_i].1.push(fuse_key.to_string()+if i!=vec_fuse_keys.len()-1{", "}else{""});
                 match fuse_key{
                     FuseKey::Pair(s0,s1)=>{
-                        self.build_tree_recurse(s0.to_string(),hm_visited,build_tier+1,build_str);
-                        self.build_tree_recurse(s1.to_string(),hm_visited,build_tier+1,build_str);
+                        self.print_simple_recurse(build_vec,sort_tier+1,s0,visit_hs);
+                        self.print_simple_recurse(build_vec,sort_tier+1,s1,visit_hs);
                     }
-                    FuseKey::Single(s)=>{
-                        self.build_tree_recurse(s.to_string(),hm_visited,build_tier+1,build_str);
+                    FuseKey::Single(s0)=>{
+                        self.print_simple_recurse(build_vec,sort_tier+1,s0,visit_hs);
+                    }
+                }
+            }
+        }
+        pub(super) fn print_tree(&self,w:&mut IOWrapper)->CSResult<()>{
+            let Some(ref parent_str)=self.parent else{ unreachable!(concat!("Shouldn't be here at ",line!())) };
+            let mut visit_hs=HashSet::<String>::new();
+            let mut build_vec=Vec::<(usize,String)>::new();
+            self.print_tree_recurse(&mut build_vec,0,parent_str,&mut visit_hs,parent_str.to_owned());
+            build_vec.sort_by(|lhs,rhs|lhs.0.cmp(&rhs.0));
+            w.write_output(build_vec.iter().map(|(_,str)|str.to_owned()+"\n").collect::<Box<_>>().concat())?;
+            Ok(())
+        }
+        fn print_tree_recurse(&self,build_vec:&mut Vec<(usize,String)>,sort_tier:usize,visit_str:&String,visit_hs:&mut HashSet::<String>,concat_str:String){
+            build_vec.push((sort_tier,concat_str.clone()));
+            if !visit_hs.insert(visit_str.clone()){ return }
+            let Some(vec_fuse_keys)=self.cubes.get(visit_str) else{ return };
+            for fuse_key in vec_fuse_keys{
+                match fuse_key{
+                    FuseKey::Pair(s0,s1)=>{
+                        self.print_tree_recurse(build_vec,sort_tier+1,s0,visit_hs,concat_str.clone()+"/"+s0);
+                        self.print_tree_recurse(build_vec,sort_tier+1,s1,visit_hs,concat_str.clone()+"/"+s1);
+                    }
+                    FuseKey::Single(s0)=>{
+                        self.print_tree_recurse(build_vec,sort_tier+1,s0,visit_hs,concat_str.clone()+"/"+s0);
+                    }
+                }
+            }
+        }
+    }
+}
+impl CubeDLL{
+    fn build_tree_at_p(&self,w:&mut IOWrapper,arg:&str)->CSResult<()>{
+        let Some(csl_p)=&self.pointer else {return Err(error::CSError::NullPointer("CubeDLL::change_tier_at_p")) };
+        let cs_str=csl_p.borrow().name.clone();
+        if arg=="build_tree"{
+            w.write_output_nl(format!("Cube Combinations to get {}",cs_str))?;
+        }
+        let mut btn:bt::BuildTreeNode=Default::default();
+        self.build_tree_recurse(&cs_str,&mut btn);
+        if arg=="build_tree"{
+            btn.print_simple(w)?;
+        }else{
+            btn.print_tree(w)?;
+        }
+        Ok(())
+    }
+    fn build_tree_recurse(&self,visit_str:&String,btn:&mut bt::BuildTreeNode){
+        if btn.add_cube(visit_str){
+            let cs=self.hashmap.get(visit_str).unwrap().borrow();
+            for fuse_key in cs.fused_by.keys(){
+                btn.add_fuse_key(visit_str,fuse_key);
+                match fuse_key{
+                    FuseKey::Pair(s0,s1)=>{
+                        self.build_tree_recurse(s0,btn);
+                        self.build_tree_recurse(s1,btn);
+                    }
+                    FuseKey::Single(s0)=>{
+                        self.build_tree_recurse(s0,btn);
                     }
                 }
             }

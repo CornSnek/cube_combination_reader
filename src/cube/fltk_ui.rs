@@ -1,8 +1,9 @@
-use fltk::{app, prelude::*, window::{Window, self}};
-pub struct App{
-    app:app::App,
-    window:window::DoubleWindow,
+use std::collections::VecDeque;
+use fltk::{app::{self, App}, prelude::*, window::Window};
+#[derive(Default)]
+pub struct FltkApp{
     max_output_widgets:usize,
+    max_commands:usize,
     tui:super::tui::TUI,
     parse_tile:fltk::group::Tile,
     output_box:fltk::group::Scroll,
@@ -16,32 +17,10 @@ pub struct App{
 }
 #[derive(Clone)]
 enum Message{
-    DropdownCommand,
-    CommandParse,
-    CubeFilter,
-    CubeAdd,
+    DropdownCommand,CommandParse,FirstCommand,CubeFilter,CubeAdd,CmdHUp,CmdHDown
 }
-impl Default for App{
-    fn default()->Self {
-        Self{
-            app:app::App::default().with_scheme(app::Scheme::Gtk),
-            window:Window::new(0,0,WINDOW_SIZE.0,WINDOW_SIZE.1,"Cube Combinations Reader"),
-            max_output_widgets:20,
-            tui:Default::default(),
-            parse_tile:Default::default(),
-            output_box:Default::default(),
-            command_usage_label:Default::default(),
-            parse_button:Default::default(),
-            commands_choice:Default::default(),
-            commands_input:Default::default(),
-            cube_data:Default::default(),
-            cube_data_label:Default::default(),
-            cube_data_add:Default::default(),
-        }
-    }
-}
-const WINDOW_SIZE:(i32,i32)=(1024,768);
-const TILE_SIZE:(i32,i32)=(WINDOW_SIZE.0,128);
+pub const WINDOW_SIZE:(i32,i32)=(1024,768);
+pub const TILE_SIZE:(i32,i32)=(WINDOW_SIZE.0,128);
 use cube_combination_reader::*;
 use fltk::prelude::WidgetExt;
 use super::tui::TUI;
@@ -52,6 +31,7 @@ pub mod app_utils{
         ///Will add more output widgets later.
         #[allow(dead_code)] TempDummy
     }
+    #[derive(Default)]
     pub struct OutputContainer{
         pub cmd:fltk::frame::Frame,
         pub ow:Option<OutputWidget>,
@@ -89,15 +69,17 @@ pub mod app_utils{
             p.remove(&self.cmd);
         }
     }
-    impl Default for OutputContainer{
-        fn default()->Self{
-            Self{cmd:Default::default(),ow:Default::default()}
+}
+impl FltkApp{
+    pub fn new()->Self{
+        Self{
+            max_output_widgets:20,
+            max_commands:20,
+            ..Default::default()
         }
     }
-}
-impl App{
-    pub fn gui_loop(&mut self,file_opt:Option<String>){
-        use std::collections::VecDeque;
+    pub fn gui_loop(&mut self,self_app:App,mut self_window:Window,file_opt:Option<String>){
+        let (mut commands_history,mut cmdh_p)=(VecDeque::<(String,String)>::new(),0usize); //Todo line history for the gui like in rustyline.
         let (s,r)=app::channel::<Message>();
         self.command_usage_label.set_label("Type commands on the bottom left or use the dropdown menu.");
         let (cuf_p,cuf_s)=(ScaleOffsetSize::new(0.0,0.0,0,0),ScaleOffsetSize::new(1.0,0.5,0,0));
@@ -128,15 +110,41 @@ impl App{
         format_widget(&mut self.cube_data_label,&self.parse_tile,&cdl_p,&cdl_s);
         format_widget(&mut self.cube_data_add,&self.parse_tile,&cda_p,&cda_s);
         self.parse_button.emit(s.clone(),Message::CommandParse);
-        self.tui.hm_command.remove("find");
+        self.tui.hm_command.remove("find"); //Already added in gui.
+        self.tui.hm_command.insert("build_tree_gui",(TUI::build_tree_cmd,"<build_tree_gui (cube_name)>","Gets all associated cube fusions to make this cube. GUI exclusive."));
         let mut sort_cmds=self.tui.hm_command.iter().collect::<Box<_>>();
         sort_cmds.sort_unstable_by(|l,r|l.0.cmp(r.0));
-        for (k,_) in sort_cmds.iter(){
+        for (k,_) in sort_cmds.into_iter(){
             self.commands_choice.add(k);
         }
+        self.commands_choice.handle({let s=s.clone(); move|_,e|{
+            use fltk::enums::{Event,Key};
+            let (Event::KeyDown,Key::Enter|Key::Tab)=(e,app::event_key()) else{ return false };
+            s.send(Message::FirstCommand);
+            s.send(Message::DropdownCommand);
+            true
+        }});
         self.commands_choice.emit(s.clone(),Message::DropdownCommand);
         self.cube_data.emit(s.clone(),Message::CubeFilter);
         self.cube_data_add.emit(s.clone(),Message::CubeAdd);
+        self.commands_input.handle({let s=s.clone(); move|_,e|{
+            use fltk::enums::{Event,Key};
+            if let Event::KeyDown=e{
+                match app::event_key(){
+                    Key::Enter|Key::Tab=>{ s.send(Message::CommandParse); return true }
+                    Key::Up=>{ s.send(Message::CmdHUp); return false }
+                    Key::Down=>{ s.send(Message::CmdHDown);  return false }
+                    _=>()
+                }
+            }
+            false
+        }});
+        self.cube_data.handle({let s=s.clone(); move|_,e|{
+            use fltk::enums::{Event,Key};
+            let (Event::KeyDown,Key::Enter|Key::Tab)=(e,app::event_key()) else{ return false };
+            s.send(Message::CubeAdd);
+            true
+        }});
         self.parse_tile.add(&self.command_usage_label);
         self.parse_tile.add(&self.parse_button);
         self.parse_tile.add(&self.commands_choice);
@@ -144,9 +152,9 @@ impl App{
         self.parse_tile.add(&self.cube_data);
         self.parse_tile.add(&self.cube_data_label);
         self.parse_tile.add(&self.cube_data_add);
-        self.window.add(&self.parse_tile);
-        self.window.add(&self.output_box);
-        self.window.show();
+        self_window.add(&self.parse_tile);
+        self_window.add(&self.output_box);
+        self_window.show();
         use app_utils::*;
         let mut output_widgets:VecDeque<OutputContainer>=VecDeque::new();
         let mut scroll_interpolate:i32=0;
@@ -180,17 +188,22 @@ impl App{
         let default_cmd=&(TUI::not_found_cmd as super::commands::Commands,"","");
         if let Some(file)=file_opt{
             let command_unwrap_tup=self.tui.hm_command.get("load_from").expect("Wrong command.");
-            let mut oc=OutputContainer::new(&"load_from".to_string());
+            let mut oc=OutputContainer::new(&("load_from ".to_string()+&file));
+            commands_history.push_back(("load_from".to_string(),file.clone()));
             if let Err(e)=command_unwrap_tup.0(&mut self.tui,&["",file.as_str()],""
                 ,&mut super::IOWrapper::FltkOutput(&mut oc)){
-                    if let Some(OutputWidget::MLO(ref mut mlo))=oc.ow{
-                        mlo.set_value(&format!("Error has occured: {e:?}: {e}\n"));
-                    }if let None=oc.ow{
-                        let mut mlo=fltk::output::MultilineOutput::default();
-                        mlo.set_value(&format!("Error has occured: {e:?}: {e}\n"));
-                        oc.ow=Some(OutputWidget::MLO(mlo));
-                    }else{
-                        todo!("Remove other widgets.")
+                    match oc.ow{
+                        Some(OutputWidget::MLO(ref mut mlo))=>{
+                            mlo.set_value(&format!("Error has occured: {e:?}: {e}\n"));
+                        }
+                        Some(OutputWidget::TempDummy)=>{
+                            unreachable!("Shouldn't be here.")
+                        }
+                        None=>{
+                            let mut mlo=fltk::output::MultilineOutput::default();
+                            mlo.set_value(&format!("Error has occured: {e:?}: {e}\n"));
+                            oc.ow=Some(OutputWidget::MLO(mlo));
+                        }
                     }
             }
             oc.fltk_add(&mut self.output_box);
@@ -198,8 +211,8 @@ impl App{
             rearrange_widgets(&mut output_widgets,&mut scroll_interpolate,&mut do_scroll);
             self.output_box.redraw();
         }
-        while self.app.wait(){
-            self.app.redraw();
+        while self_app.wait(){
+            self_app.redraw();
             if do_scroll{
                 self.output_box.scroll_to(0,scroll_interpolate); //Fixing dumb bug that keeps scrolling in the wrong position.
                 if scroll_interpolate>self.output_box.yposition(){ continue; }else{ do_scroll=false; }
@@ -227,8 +240,13 @@ impl App{
                                     if let Some(file_str)=file_dialog.filename().to_str(){
                                         self.commands_input.set_value(file_str);
                                     }
-                                }
-                                _=>{}
+                                },
+                                "read_all"|"exit"|"destroy_all"|
+                                "drop_all"|"remove_all"|"todo"|"usage"=>{
+                                    self.commands_input.set_value("");
+                                    self.commands_input.deactivate();
+                                },
+                                _=> self.commands_input.activate(),
                             }
                         }
                     }
@@ -242,16 +260,23 @@ impl App{
                             let mut oc=OutputContainer::new(&cmd_str);
                             if let Err(e)=command_unwrap_tup.0(&mut self.tui,&args,&usage_str
                                 ,&mut super::IOWrapper::FltkOutput(&mut oc)){
-                                    if let Some(OutputWidget::MLO(ref mut mlo))=oc.ow{
+                                match oc.ow{
+                                    Some(OutputWidget::MLO(ref mut mlo))=>{
                                         mlo.set_value(&format!("Error has occured: {e:?}: {e}\n"));
-                                    }if let None=oc.ow{
+                                    }
+                                    Some(OutputWidget::TempDummy)=>{
+                                        unreachable!("Shouldn't be here.")
+                                    }
+                                    None=>{
                                         let mut mlo=fltk::output::MultilineOutput::default();
                                         mlo.set_value(&format!("Error has occured: {e:?}: {e}\n"));
                                         oc.ow=Some(OutputWidget::MLO(mlo));
-                                    }else{
-                                        todo!("Remove other widgets.")
                                     }
+                                }
                             }
+                            commands_history.push_back((args[0].to_string(),self.commands_input.value()));
+                            cmdh_p=0;
+                            if commands_history.len()>self.max_commands{ commands_history.pop_front(); }
                             oc.fltk_add(&mut self.output_box);
                             output_widgets.push_back(oc);
                             if output_widgets.len()>self.max_output_widgets{
@@ -264,17 +289,46 @@ impl App{
                         self.cube_data.clear();
                         do_cube_filter_search(&self.tui,&mut self.cube_data,&mut self.cube_data_label);
                     }
+                    Message::FirstCommand=>{ //Autocomplete the first command it sees.
+                        let old_v_opt=self.commands_choice.value();
+                        let Some(old_v)=old_v_opt else{ continue };
+                        let mut sort_cmds=self.tui.hm_command.iter().filter(|t|t.0.contains(&old_v)).collect::<Box<_>>();
+                        sort_cmds.sort_unstable_by(|l,r|l.0.cmp(r.0));
+                        let Some(first_t)=sort_cmds.first() else{ continue };
+                        self.commands_choice.set_value(first_t.0);
+                    }
                     Message::CubeFilter=>{
                         if !self.cube_data.changed(){ //Changed via typing.
                             do_cube_filter_search(&mut self.tui,&mut self.cube_data,&mut self.cube_data_label);
                         }
                     }
                     Message::CubeAdd=>{
-                        let old_str=self.commands_input.value();
-                        let Some(value_str)=self.cube_data.value() else{
+                        let Some(mut value_str)=self.cube_data.value() else{
                             continue
                         };
+                        if !self.tui.cube_exists(&value_str){
+                            let box_keys=self.tui.cube_keys(Some(value_str.to_string()));
+                            let Some(valid_cube_str)=box_keys.first() else{ //Set to the first valid string if any.
+                                self.cube_data_label.set_label(&("'".to_string()+&value_str+"' is not a valid cube name."));
+                                continue
+                            };
+                            value_str=valid_cube_str.to_string();
+                            self.cube_data_label.set_label(&("'".to_string()+&value_str+"' used when pressing enter."));
+                        }
+                        let old_str=self.commands_input.value();
                         self.commands_input.set_value(&(old_str+" "+&value_str));
+                    }
+                    Message::CmdHUp=>{
+                        cmdh_p=(cmdh_p+1).min(commands_history.len()-1);
+                        let (ref choice,ref args)=commands_history[cmdh_p];
+                        self.commands_choice.set_value(choice);
+                        self.commands_input.set_value(args);
+                    }
+                    Message::CmdHDown=>{
+                        cmdh_p=cmdh_p.saturating_sub(1);
+                        let (ref choice,ref args)=commands_history[cmdh_p];
+                        self.commands_choice.set_value(choice);
+                        self.commands_input.set_value(args);
                     }
                 }
             }

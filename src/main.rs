@@ -11,8 +11,12 @@ fn main(){
             tui.terminal_loop(if args_len==3{Some(args[2].clone())}else{None});
         }
         "gui"=>{
-            let mut app:cube::fltk_ui::App=Default::default();
-            app.gui_loop(if args_len==3{Some(args[2].clone())}else{None});
+            use fltk::{prelude::*,app::{App,Scheme},window::Window};
+            use cube::fltk_ui::WINDOW_SIZE;
+            let app=App::default().with_scheme(Scheme::Gtk);
+            let window=Window::new(0,0,WINDOW_SIZE.0,WINDOW_SIZE.1,"Cube Combinations Reader");
+            let mut fltk_app:cube::fltk_ui::FltkApp=cube::fltk_ui::FltkApp::new();
+            fltk_app.gui_loop(app,window,if args_len==3{Some(args[2].clone())}else{None});
         }
         _=>{
             eprintln!("Usage: First argument needs to be 'terminal|gui'");

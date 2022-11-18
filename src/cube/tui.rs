@@ -285,13 +285,13 @@ impl TUI{
         self.cdll.get_fusions_at_p(w)?;
         Ok(())
     }
-    fn build_tree_cmd(&mut self,args:&[&str],usage:&str,w:&mut IOWrapper)->CSResult<()>{
+    pub(super) fn build_tree_cmd(&mut self,args:&[&str],usage:&str,w:&mut IOWrapper)->CSResult<()>{
         if args.len()!=2{
             return Err(CSError::InvalidArguments(usage.to_string()))
         }
         check_valid_cube_name(args[1])?;
         self.cdll.point_to(args[1].to_string())?;
-        self.cdll.build_tree_at_p(w)?;
+        self.cdll.build_tree_at_p(w,args[0])?;
         Ok(())
     }
     fn find_cmd(&mut self,args:&[&str],usage:&str,w:&mut IOWrapper)->CSResult<()>{
@@ -480,6 +480,9 @@ impl TUI{
                 true
             }
         }).count()
+    }
+    pub fn cube_exists(&self,key:&String)->bool{
+        self.cdll.hashmap.contains_key(key)
     }
     pub fn not_found_cmd(&mut self,args:&[&str],_:&str,_:&mut IOWrapper)->CSResult<()>{
         Err(super::error::CSError::InvalidCommand(args[0].to_string()))
