@@ -20,15 +20,16 @@ mod error;
 pub mod fltk_ui;
 use std::{rc::Rc, cell::RefCell, collections::HashMap, fmt::{Display, Formatter}, hash::Hash};
 use fltk_ui::app_utils::*;
+use error::CSResult;
 pub enum IOWrapper<'a>{
     Stdio(&'a mut std::io::Stdout,&'a mut std::io::Stdin),
     FltkOutput(&'a mut OutputContainer),
 }
 impl IOWrapper<'_>{
-    fn write_output_nl(&mut self,output:String)->error::CSResult<()>{
+    fn write_output_nl(&mut self,output:String)->CSResult<()>{
         self.write_output(output+"\n")
     }
-    fn write_output(&mut self,output:String)->error::CSResult<()>{
+    fn write_output(&mut self,output:String)->CSResult<()>{
         match self{
             Self::Stdio(sout,_)=>{
                 use std::io::Write;
@@ -53,7 +54,19 @@ impl IOWrapper<'_>{
         }
         Ok(())
     }
-    fn read_yn(&mut self,prompt:String)->error::CSResult<bool>{
+    fn do_build_tree(&mut self,output:Vec<&str>)->CSResult<()>{
+        let Self::FltkOutput(oc)=self else{ unreachable!("FltkOutput should only be here.") };
+        let None=oc.ow else{ unreachable!("OutputWidget::TW(...) should only be here.") };
+        let mut tree=fltk::tree::Tree::default();
+        let len=output.len();
+        for str in output.into_iter(){
+            if let Some(mut ti)=tree.add(str){ ti.close(); };
+        }
+        tree.set_show_root(false);
+        oc.ow=Some(OutputWidget::TW{t:tree,l:len as i32});
+        Ok(())
+    }
+    fn read_yn(&mut self,prompt:String)->CSResult<bool>{
         match self{
             Self::Stdio(sout,sin)=>{
                 loop{
@@ -240,7 +253,6 @@ impl Drop for CubeStruct{
     }
 }
 */
-use error::CSResult;
 struct CubeDLL{
     pointer:Option<Link>,
     hashmap:HashMap<String,Link>
@@ -559,11 +571,11 @@ mod bt{
     use super::error::CSResult;
     use std::collections::{HashMap, HashSet};
     #[derive(Default)]
-    pub struct BuildTreeNode{
+    pub struct BuildTree{
         parent:Option<String>,
         cubes:HashMap<String,Vec<FuseKey>>
     }
-    impl BuildTreeNode{
+    impl BuildTree{
         ///Returns false if already added and visited. Adds parent as the first string.
         pub(super) fn add_cube(&mut self,cube:&String)->bool{
             if let None=self.parent{ self.parent=Some(cube.clone()); }
@@ -611,21 +623,22 @@ mod bt{
             let mut build_vec=Vec::<(usize,String)>::new();
             self.print_tree_recurse(&mut build_vec,0,parent_str,&mut visit_hs,parent_str.to_owned());
             build_vec.sort_by(|lhs,rhs|lhs.0.cmp(&rhs.0));
-            w.write_output(build_vec.iter().map(|(_,str)|str.to_owned()+"\n").collect::<Box<_>>().concat())?;
+            w.do_build_tree(build_vec.iter().map(|(_,str)|str.as_str()).collect::<Vec<_>>())?;
             Ok(())
         }
         fn print_tree_recurse(&self,build_vec:&mut Vec<(usize,String)>,sort_tier:usize,visit_str:&String,visit_hs:&mut HashSet::<String>,concat_str:String){
             build_vec.push((sort_tier,concat_str.clone()));
             if !visit_hs.insert(visit_str.clone()){ return }
             let Some(vec_fuse_keys)=self.cubes.get(visit_str) else{ return };
-            for fuse_key in vec_fuse_keys{
+            for (mut i,fuse_key) in vec_fuse_keys.into_iter().enumerate(){
+                i+=1;
                 match fuse_key{
                     FuseKey::Pair(s0,s1)=>{
-                        self.print_tree_recurse(build_vec,sort_tier+1,s0,visit_hs,concat_str.clone()+"/"+s0);
-                        self.print_tree_recurse(build_vec,sort_tier+1,s1,visit_hs,concat_str.clone()+"/"+s1);
+                        self.print_tree_recurse(build_vec,sort_tier+1,s0,visit_hs,concat_str.clone()+"/k"+&i.to_string()+".1: "+s0);
+                        self.print_tree_recurse(build_vec,sort_tier+1,s1,visit_hs,concat_str.clone()+"/k"+&i.to_string()+".2: "+s1);
                     }
                     FuseKey::Single(s0)=>{
-                        self.print_tree_recurse(build_vec,sort_tier+1,s0,visit_hs,concat_str.clone()+"/"+s0);
+                        self.print_tree_recurse(build_vec,sort_tier+1,s0,visit_hs,concat_str.clone()+"/k"+&i.to_string()+".1: "+s0);
                     }
                 }
             }
@@ -639,7 +652,7 @@ impl CubeDLL{
         if arg=="build_tree"{
             w.write_output_nl(format!("Cube Combinations to get {}",cs_str))?;
         }
-        let mut btn:bt::BuildTreeNode=Default::default();
+        let mut btn:bt::BuildTree=Default::default();
         self.build_tree_recurse(&cs_str,&mut btn);
         if arg=="build_tree"{
             btn.print_simple(w)?;
@@ -648,7 +661,7 @@ impl CubeDLL{
         }
         Ok(())
     }
-    fn build_tree_recurse(&self,visit_str:&String,btn:&mut bt::BuildTreeNode){
+    fn build_tree_recurse(&self,visit_str:&String,btn:&mut bt::BuildTree){
         if btn.add_cube(visit_str){
             let cs=self.hashmap.get(visit_str).unwrap().borrow();
             for fuse_key in cs.fused_by.keys(){

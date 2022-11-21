@@ -28,6 +28,7 @@ use super::tui::TUI;
 pub mod app_utils{
     pub enum OutputWidget{ //Explicit because self.output_box.remove cannot use Box<dyn WidgetExt>.
         MLO(fltk::output::MultilineOutput),
+        TW{t:fltk::tree::Tree,l:i32},
         ///Will add more output widgets later.
         #[allow(dead_code)] TempDummy
     }
@@ -40,19 +41,30 @@ pub mod app_utils{
         pub fn new(cmd:&String)->Self{
             use fltk::prelude::WidgetExt;
             let mut s=Self{..Default::default()};
-            s.cmd.set_label(&("Command used: '".to_string()+&cmd+"'"));
+            s.cmd.set_label(&("Command: '".to_string()+&cmd+"'"));
             s
         }
         pub fn fltk_add(&mut self,p:&mut fltk::group::Scroll){
             use fltk::prelude::*;
+            const CHAR_WIDTH_ADJ:f32=0.6; //Just guessing.
+            const CHAR_HEIGHT_ADJ:i32=6;
+            self.cmd.set_size(super::WINDOW_SIZE.0,20);
             match self.ow{
                 Some(OutputWidget::MLO(ref mut mlo))=>{
                     let str_v=mlo.value();
                     let value_ncount=str_v.chars().fold(0,|acc,ch|acc+if ch=='\n'{1}else{0});
                     let max_line_count=str_v.split('\n').map(|str|{ str.len() }).max().unwrap() as i32;
-                    self.cmd.set_size(super::WINDOW_SIZE.0,20);
-                    mlo.set_size((max_line_count*(mlo.text_size() as f32*0.6) as i32).max(super::WINDOW_SIZE.0),value_ncount*(mlo.text_size()+6)+mlo.text_size());
+                    mlo.set_size(
+                        (max_line_count*(mlo.text_size() as f32*CHAR_WIDTH_ADJ) as i32).max(super::WINDOW_SIZE.0),
+                        value_ncount*(mlo.text_size()+CHAR_HEIGHT_ADJ)+mlo.text_size()
+                    );
                     p.add(mlo);
+                }
+                Some(OutputWidget::TW{t:ref mut tw,l})=>{
+                    tw.set_size(super::WINDOW_SIZE.0,
+                        l*(tw.label_size()+CHAR_HEIGHT_ADJ)+tw.label_size()
+                    );
+                    p.add(tw);
                 }
                 _=>{}
             }
@@ -61,9 +73,8 @@ pub mod app_utils{
         pub fn fltk_remove(&mut self,p:&mut fltk::group::Scroll){
             use fltk::prelude::*;
             match self.ow{
-                Some(OutputWidget::MLO(ref mlo))=>{
-                    p.remove(mlo);
-                }
+                Some(OutputWidget::MLO(ref mlo))=>p.remove(mlo),
+                Some(OutputWidget::TW{ref t,..})=>p.remove(t),
                 _=>{}
             }
             p.remove(&self.cmd);
@@ -111,7 +122,7 @@ impl FltkApp{
         format_widget(&mut self.cube_data_add,&self.parse_tile,&cda_p,&cda_s);
         self.parse_button.emit(s.clone(),Message::CommandParse);
         self.tui.hm_command.remove("find"); //Already added in gui.
-        self.tui.hm_command.insert("build_tree_gui",(TUI::build_tree_cmd,"<build_tree_gui (cube_name)>","Gets all associated cube fusions to make this cube. GUI exclusive."));
+        self.tui.hm_command.insert("build_tree_gui",(TUI::build_tree_cmd,"<build_tree_gui (cube_name)>","Gets all associated cube fusions to make this cube. GUI exclusive as a tree."));
         let mut sort_cmds=self.tui.hm_command.iter().collect::<Box<_>>();
         sort_cmds.sort_unstable_by(|l,r|l.0.cmp(r.0));
         for (k,_) in sort_cmds.into_iter(){
@@ -162,18 +173,25 @@ impl FltkApp{
         ///When adding/removing widgets.
         fn rearrange_widgets(ow:&mut VecDeque<OutputContainer>,scroll_interpolate:&mut i32,do_scroll:&mut bool){
             let mut total_box_size:i32=0;
+            let mut total_box_size_last:i32=0; //Scroll to the first output widget.
             for w in ow.iter_mut(){
+                total_box_size_last=total_box_size;
                 w.cmd.set_pos(0,total_box_size);
                 total_box_size+=w.cmd.h();
                 match w.ow{
                     Some(OutputWidget::MLO(ref mut mlo))=>{
                         mlo.set_pos(0,total_box_size);
                         total_box_size+=mlo.h();
+                    },
+                    Some(OutputWidget::TW{ref mut t,..})=>{
+                        t.set_pos(0,total_box_size);
+                        total_box_size+=t.h();
                     }
                     _=>{}
                 }
             }
-            *scroll_interpolate=total_box_size-WINDOW_SIZE.1+TILE_SIZE.1+12;
+            //*scroll_interpolate=total_box_size-WINDOW_SIZE.1+TILE_SIZE.1+12;
+            *scroll_interpolate=total_box_size_last;
             *do_scroll=true;
         }
         fn do_cube_filter_search(tui:&TUI,cube_data:&mut fltk::misc::InputChoice,cube_data_label:&mut fltk::frame::Frame){
@@ -196,7 +214,7 @@ impl FltkApp{
                         Some(OutputWidget::MLO(ref mut mlo))=>{
                             mlo.set_value(&format!("Error has occured: {e:?}: {e}\n"));
                         }
-                        Some(OutputWidget::TempDummy)=>{
+                        Some(_)=>{
                             unreachable!("Shouldn't be here.")
                         }
                         None=>{
@@ -264,7 +282,7 @@ impl FltkApp{
                                     Some(OutputWidget::MLO(ref mut mlo))=>{
                                         mlo.set_value(&format!("Error has occured: {e:?}: {e}\n"));
                                     }
-                                    Some(OutputWidget::TempDummy)=>{
+                                    Some(_)=>{
                                         unreachable!("Shouldn't be here.")
                                     }
                                     None=>{
