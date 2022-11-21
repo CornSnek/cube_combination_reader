@@ -81,8 +81,8 @@ impl IOWrapper<'_>{
                 }
             }
             Self::FltkOutput(..)=>{
-                if let Some(choice)=fltk::dialog::choice2_default((prompt.clone()+"> ").as_str(),"Yes","No",""){
-                    Ok(if choice==1{ false }else{ true })
+                if let Some(choice)=fltk::dialog::choice2_default((prompt+"> ").as_str(),"Yes","No",""){
+                    Ok(choice != 1)
                 }else{
                     Ok(false)
                 }
@@ -105,8 +105,8 @@ impl FuseKey{
     fn new_pair(s1:&String,s2:&String)->Self{
         if s1<s2{ Self::Pair(s1.clone(),s2.clone()) }else{ Self::Pair(s2.clone(),s1.clone()) }
     }
-    fn new_single(s1:&String)->Self{
-        Self::Single(s1.clone())
+    fn new_single(s1:&str)->Self{
+        Self::Single(s1.to_owned())
     }
     fn contains_key(&self,cmp_str:&String)->bool{
         match self{
@@ -212,7 +212,7 @@ impl CubeStruct{
 }
 impl Display for CubeStruct{
     fn fmt(&self, f: &mut Formatter)->Result<(),std::fmt::Error>{
-        let con_to=if self.converts_to.len()!=0{
+        let con_to=if !self.converts_to.is_empty(){
             let mut str=String::new();
             for (i,csl) in self.converts_to.values().enumerate(){
                 str.push('"');
@@ -253,15 +253,12 @@ impl Drop for CubeStruct{
     }
 }
 */
+#[derive(Default)]
 struct CubeDLL{
     pointer:Option<Link>,
     hashmap:HashMap<String,Link>
 }
-impl Default for CubeDLL{
-    fn default()->Self{
-        Self{pointer:None,hashmap:HashMap::new()}
-    }
-}
+
 impl CubeDLL{
     fn add(&mut self,cs:CubeStruct)->CSResult<()>{
         let str=&cs.name.clone();
@@ -329,9 +326,9 @@ impl CubeDLL{
             }
         }
         csl_p.borrow_mut().add_fb_pair(csl1,csl2,w)?;
-        csl1.borrow_mut().add_to(&csl_p,w)?;
+        csl1.borrow_mut().add_to(csl_p,w)?;
         if csl1.borrow().name==csl2.borrow().name{ return Ok(()) } //Don't rewrite twice if csl2 is the same as csl1.
-        csl2.borrow_mut().add_to(&csl_p,w)?;
+        csl2.borrow_mut().add_to(csl_p,w)?;
         Ok(())
     }
     fn link_at_p_fb_single(&self,cs_n:String,w:&mut IOWrapper)->CSResult<()>{
@@ -363,7 +360,7 @@ impl CubeDLL{
             }
         }
         csl_p.borrow_mut().add_fb_single(csl,w)?;
-        csl.borrow_mut().add_to(&csl_p,w)?;
+        csl.borrow_mut().add_to(csl_p,w)?;
         Ok(())
     }
     fn unlink_at_p_fb(&self)->CSResult<()>{
@@ -389,14 +386,14 @@ impl CubeDLL{
                 }
                 let key=FuseKey::new_pair(&csl1.borrow().name.to_string(),&csl2.borrow().name.to_string());
                 csl_p.borrow_mut().remove_fb_key(key,w)?;
-                csl1.borrow_mut().remove_to_maybe(&csl_p,w)?;
+                csl1.borrow_mut().remove_to_maybe(csl_p,w)?;
                 if csl1.borrow().name==csl2.borrow().name{ return Ok(()) } //Don't rewrite twice if csl2 is the same as csl1.
-                csl2.borrow_mut().remove_to_maybe(&csl_p,w)?;
+                csl2.borrow_mut().remove_to_maybe(csl_p,w)?;
             }
             None=>{
                 let key=FuseKey::new_single(&csl1.borrow().name.to_string());
                 csl_p.borrow_mut().remove_fb_key(key,w)?;
-                csl1.borrow_mut().remove_to_maybe(&csl_p,w)?;
+                csl1.borrow_mut().remove_to_maybe(csl_p,w)?;
             }
         }
         Ok(())
@@ -486,7 +483,7 @@ impl CubeDLL{
         }else{ unreachable!("Shouldn't be accessed. Should use point_to()") }
     }
     fn get_info_cube_paths(&self,w:&mut IOWrapper)->CSResult<()>{
-        w.write_output_nl(format!("Syntax: fused_by: [fuse key array (single/pair)] => [[this cube name]](tier) => converts_to: [cube name array]"))?;
+        w.write_output_nl("Syntax: fused_by: [fuse key array (single/pair)] => [[this cube name]](tier) => converts_to: [cube name array]".to_string())?;
         for csl in self.hashmap.values(){
             let cs=csl.borrow();
             let mut cs_str=String::new();
@@ -521,7 +518,7 @@ impl CubeDLL{
                 if i!=cs.converts_to.len()-1{ cs_str.push(','); }
             }
             cs_str.push(']');
-            w.write_output_nl(format!("{cs_str}"))?;
+            w.write_output_nl(cs_str.to_string())?;
         }
         Ok(())
     }
@@ -578,7 +575,7 @@ mod bt{
     impl BuildTree{
         ///Returns false if already added and visited. Adds parent as the first string.
         pub(super) fn add_cube(&mut self,cube:&String)->bool{
-            if let None=self.parent{ self.parent=Some(cube.clone()); }
+            if self.parent.is_none(){ self.parent=Some(cube.clone()); }
             if self.cubes.get(cube).is_some(){ false }else{
                 self.cubes.insert(cube.clone(),Default::default());
                 true
@@ -630,7 +627,7 @@ mod bt{
             build_vec.push((sort_tier,concat_str.clone()));
             if !visit_hs.insert(visit_str.clone()){ return }
             let Some(vec_fuse_keys)=self.cubes.get(visit_str) else{ return };
-            for (mut i,fuse_key) in vec_fuse_keys.into_iter().enumerate(){
+            for (mut i,fuse_key) in vec_fuse_keys.iter().enumerate(){
                 i+=1;
                 match fuse_key{
                     FuseKey::Pair(s0,s1)=>{
@@ -696,11 +693,11 @@ impl CubeDLL{
             }
         }
         if let Some(qcsl)=self.hashmap.get("?"){
-            w.write_output_nl(format!("Printing fusion keys to unknown '?' Cubes"))?;
+            w.write_output_nl("Printing fusion keys to unknown '?' Cubes".to_string())?;
             for fuse_key in qcsl.borrow().fused_by.keys(){
                 w.write_output(format!("{}, ",fuse_key))?;
             }
-            w.write_output_nl(format!("\n"))?;
+            w.write_output_nl("\n".to_string())?;
         }
         Ok(())
     }

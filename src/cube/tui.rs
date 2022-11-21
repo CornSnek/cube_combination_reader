@@ -269,10 +269,10 @@ impl TUI{
         Ok(())
     }
     fn rem_all_cmd(&mut self,_:&[&str],_:&str,w:&mut IOWrapper)->CSResult<()>{
-        if self.yn_loop(format!("All cube data will be erased without saving."),w)?{
+        if self.yn_loop("All cube data will be erased without saving.".to_string(),w)?{
             self.cdll.remove_all_cubes();
             self.has_saved=true;
-            w.write_output_nl(format!("All cubes in the program have been removed."))?;
+            w.write_output_nl("All cubes in the program have been removed.".to_string())?;
         }
         Ok(())
     }
@@ -324,7 +324,7 @@ impl TUI{
             }
             _=>return Err(CSError::InvalidArguments(usage.to_string()))
         };
-        w.write_output_nl(format!("{result}"))?;
+        w.write_output_nl(result)?;
         Ok(())
     }
     fn todo_cmd(&mut self,_:&[&str],_:&str,w:&mut IOWrapper)->CSResult<()>{
@@ -398,7 +398,7 @@ impl TUI{
             w.write_output_nl(format!("Cube \"{}\" added",cube_name))?;
             let Some(valid_fcs)=cube_str[2].strip_suffix(';') else{ return Err(CSError::ParseError("TUI::read_to_file",format!("Line {i}: Missing semi-colon at field fused_by"))) };
             if valid_fcs.is_empty(){ continue }
-            for fcs in valid_fcs.split(",").collect::<Box<_>>().iter(){
+            for fcs in valid_fcs.split(',').collect::<Box<_>>().iter(){
                 let mut iter3=fcs.split('|');
                 let (Some(fc1),fc2_opt,None)=(iter3.next(),iter3.next(),iter3.next()) else{ //Size can be either 1 or 2, but never 3+
                     return Err(CSError::ParseError("TUI::read_to_file",format!("Line {i}: There should only be 1 or 2 cube names delimited with ,")))
@@ -435,30 +435,28 @@ impl TUI{
                 }
             }
         }
-        w.write_output_nl(format!("File successfully read."))?;
+        w.write_output_nl("File successfully read.".to_string())?;
         self.has_saved=true;
         Ok(())
     }
     fn exit_cmd(&mut self,_:&[&str],_:&str,w:&mut IOWrapper)->CSResult<()>{
-        if !self.has_saved{
-            if !self.yn_loop(format!("There may be unsaved cube data not saved yet."),w)?{
-                return Ok(())
-            }
+        if !self.has_saved && !self.yn_loop("There may be unsaved cube data not saved yet.".to_string(),w)? {
+            return Ok(())
         }
         self.done_program=true;
         Ok(())
     }
     fn usage_cmd(&mut self,_:&[&str],_:&str,w:&mut IOWrapper)->CSResult<()>{
-        w.write_output_nl(format!("Format: <command arg1 arg2 ...>\n\
+        w.write_output_nl("Format: <command arg1 arg2 ...>\n\
         + means more than 1 set of arguments can also be added\n\
         ? means that an argument is optional\n\
-        Command may have more than 1 name delimited with |"))?;
+        Command may have more than 1 name delimited with |".to_string())?;
         let mut unique_usage_str=HashSet::<&str>::new(); //To only show usages of multiple same name commands once.
         let mut usage_str_box=self.hm_command.values().filter(|&&(_,s1,_)|unique_usage_str.insert(s1)).map(|&(_,s1,s2)|s1.to_string()+"\n\t"+s2).collect::<Box<_>>();
         usage_str_box.sort_unstable();
-        w.write_output_nl(format!("{}",usage_str_box.iter().enumerate().fold(String::new(),|res,(u,s)|{
+        w.write_output_nl(usage_str_box.iter().enumerate().fold(String::new(),|res,(u,s)|{
             res+s+if u!=usage_str_box.len()-1{"\n"}else{""}
-        })))?;
+        }))?;
         Ok(())
     }
     pub fn cube_keys(&self,filter_opt:Option<String>)->Box<[&String]>{
@@ -494,10 +492,8 @@ impl TUI{
             let default_cmd=&(Self::not_found_cmd as super::commands::Commands,"","");
             if args.is_empty(){ continue }
             let command_unwrap_tup=self.hm_command.get(args[0]).unwrap_or(default_cmd);
-            if let Err(e)=command_unwrap_tup.0(self
-                ,&args,command_unwrap_tup.1,&mut IOWrapper::Stdio(&mut std::io::stdout(),&mut std::io::stdin())){
-                return Err(e)
-            }
+            command_unwrap_tup.0(self
+                ,args,command_unwrap_tup.1,&mut IOWrapper::Stdio(&mut std::io::stdout(),&mut std::io::stdin()))?
         }
         Ok(())
     }

@@ -41,7 +41,7 @@ pub mod app_utils{
         pub fn new(cmd:&String)->Self{
             use fltk::prelude::WidgetExt;
             let mut s=Self{..Default::default()};
-            s.cmd.set_label(&("Command: '".to_string()+&cmd+"'"));
+            s.cmd.set_label(&("Command: '".to_string()+cmd+"'"));
             s
         }
         pub fn fltk_add(&mut self,p:&mut fltk::group::Scroll){
@@ -52,7 +52,7 @@ pub mod app_utils{
             match self.ow{
                 Some(OutputWidget::MLO(ref mut mlo))=>{
                     let str_v=mlo.value();
-                    let value_ncount=str_v.chars().fold(0,|acc,ch|acc+if ch=='\n'{1}else{0});
+                    let value_ncount=str_v.chars().fold(0,|acc,ch|acc+(ch=='\n') as i32);
                     let max_line_count=str_v.split('\n').map(|str|{ str.len() }).max().unwrap() as i32;
                     mlo.set_size(
                         (max_line_count*(mlo.text_size() as f32*CHAR_WIDTH_ADJ) as i32).max(super::WINDOW_SIZE.0),
@@ -125,7 +125,7 @@ impl FltkApp{
         self.tui.hm_command.insert("build_tree_gui",(TUI::build_tree_cmd,"<build_tree_gui (cube_name)>","Gets all associated cube fusions to make this cube. GUI exclusive as a tree."));
         let mut sort_cmds=self.tui.hm_command.iter().collect::<Box<_>>();
         sort_cmds.sort_unstable_by(|l,r|l.0.cmp(r.0));
-        for (k,_) in sort_cmds.into_iter(){
+        for (k,_) in sort_cmds.iter(){
             self.commands_choice.add(k);
         }
         self.commands_choice.handle({let s=s.clone(); move|_,e|{
@@ -150,7 +150,7 @@ impl FltkApp{
             }
             false
         }});
-        self.cube_data.handle({let s=s.clone(); move|_,e|{
+        self.cube_data.handle({let s=s; move|_,e|{
             use fltk::enums::{Event,Key};
             let (Event::KeyDown,Key::Enter|Key::Tab)=(e,app::event_key()) else{ return false };
             s.send(Message::CubeAdd);
@@ -199,7 +199,7 @@ impl FltkApp{
             let filter_str=cube_data.value();
             cube_data_label.set_label(format!("Cube filter: {} total cubes. Found {}."
                 ,tui.cube_count(None),tui.cube_count(filter_str.clone())).as_str());
-            for cube in tui.cube_keys(filter_str).into_iter(){
+            for cube in tui.cube_keys(filter_str).iter(){
                 cube_data.add(cube.as_str());
             }
         }
@@ -317,7 +317,7 @@ impl FltkApp{
                     }
                     Message::CubeFilter=>{
                         if !self.cube_data.changed(){ //Changed via typing.
-                            do_cube_filter_search(&mut self.tui,&mut self.cube_data,&mut self.cube_data_label);
+                            do_cube_filter_search(&self.tui,&mut self.cube_data,&mut self.cube_data_label);
                         }
                     }
                     Message::CubeAdd=>{
