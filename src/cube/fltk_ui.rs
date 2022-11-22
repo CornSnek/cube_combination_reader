@@ -17,7 +17,7 @@ pub struct FltkApp{
 }
 #[derive(Clone)]
 enum Message{
-    DropdownCommand,CommandParse,FirstCommand,CubeFilter,CubeAdd,CmdHUp,CmdHDown
+    DropdownCommand,CommandParse,FirstCommand,CubeFilter,CubeAdd,CmdHUp,CmdHDown,DoClose
 }
 pub const WINDOW_SIZE:(i32,i32)=(1024,768);
 pub const TILE_SIZE:(i32,i32)=(WINDOW_SIZE.0,128);
@@ -150,7 +150,7 @@ impl FltkApp{
             }
             false
         }});
-        self.cube_data.handle({let s=s; move|_,e|{
+        self.cube_data.handle({let s=s.clone(); move|_,e|{
             use fltk::enums::{Event,Key};
             let (Event::KeyDown,Key::Enter|Key::Tab)=(e,app::event_key()) else{ return false };
             s.send(Message::CubeAdd);
@@ -229,6 +229,10 @@ impl FltkApp{
             rearrange_widgets(&mut output_widgets,&mut scroll_interpolate,&mut do_scroll);
             self.output_box.redraw();
         }
+        self_window.set_callback({
+            let s=s;
+            move |_|{ s.send(Message::DoClose); }
+        });
         while self_app.wait(){
             self_app.redraw();
             if do_scroll{
@@ -348,7 +352,19 @@ impl FltkApp{
                         self.commands_choice.set_value(choice);
                         self.commands_input.set_value(args);
                     }
+                    Message::DoClose=>{
+                        if self.tui.b_has_saved(){ self_app.quit(); continue } //Exit immediately if already saved.
+                        if let Some(choice)=fltk::dialog::choice2_default(concat!("Unsaved data will be saved to ",SWF!(Temp),". Continue?"),"Yes","No",""){
+                            if choice!=1{ self_app.quit(); }
+                        }
+                    }
                 }
+            }
+        }
+        if !self.tui.b_has_saved(){
+            println!(concat!("Saving any unsaved data to ",SWF!(Temp),"."));
+            if let Err(e)=self.tui.save_temp(){
+                super::tui::do_print_error!("Saving error has occured: {e:?}: {e}");
             }
         }
     }

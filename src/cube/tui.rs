@@ -49,6 +49,7 @@ impl TUI{ ///For the commands in get_commands_hashmap(), set the appropriate sav
 macro_rules! do_print_error{
     ($($arg:tt)*)=>{ eprint!("\x1b[1;33m"); eprint!($($arg)*); eprintln!("\x1b[0m"); }
 }
+pub(crate) use do_print_error;
 use std::collections::HashSet;
 use std::io::Read;
 use super::CubeStruct;
@@ -355,7 +356,7 @@ impl TUI{
         self.has_saved=true;
         Ok(())
     }
-    fn save_temp(&mut self)->CSResult<()>{
+    pub fn save_temp(&mut self)->CSResult<()>{
         use std::fs::File;
         use std::io::Write;
         let mut to_file={ match File::create(SWF!(Temp)){ Ok(file)=>file, Err(e)=>return ErrToCSErr!(e) } };
@@ -484,6 +485,9 @@ impl TUI{
     }
     pub fn not_found_cmd(&mut self,args:&[&str],_:&str,_:&mut IOWrapper)->CSResult<()>{
         Err(super::error::CSError::InvalidCommand(args[0].to_string()))
+    }
+    pub fn b_has_saved(&self)->bool{
+        self.has_saved
     }
     #[cfg(test)]
     fn test_multiple_commands(&mut self,args:Box<[Box<[&str]>]>)->CSResult<()>{
